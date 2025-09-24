@@ -1,0 +1,735 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>BPS - 开票管理（交互原型）</title>
+  <style>
+    :root {
+      --bg:#f7f8fa;--card:#fff;--text:#1f2d3d;--muted:#5c6b77;--primary:#2e7d32;--primary-600:#256e2a;
+      --warn:#ff8f00;--border:#e6e8eb;--decision:#fff3e0;
+    }
+    *{box-sizing:border-box} html,body{height:100%}
+    body{margin:0;background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,'PingFang SC','Hiragino Sans GB','Microsoft Yahei',sans-serif}
+    .layout{display:grid;grid-template-columns:260px 1fr;min-height:100vh}
+    .sidebar{background:#fff;border-right:1px solid var(--border);padding:16px}
+    .brand{font-weight:700;font-size:16px;margin-bottom:12px;color:#0277bd}
+    .nav-link{display:block;padding:8px 10px;color:var(--text);text-decoration:none;border-radius:6px;margin-bottom:4px}
+    .nav-link.active,.nav-link:hover{background:#f1f5f9}
+    .content{padding:20px}
+    .card{background:#fff;border:1px solid var(--border);border-radius:12px;padding:16px}
+    .actions{display:flex;gap:8px;align-items:center}
+    .btn{border:1px solid var(--border);background:#fff;color:var(--text);border-radius:10px;padding:8px 12px;cursor:pointer}
+    .btn.primary{background:var(--primary);color:#fff;border-color:var(--primary-600)}
+    .btn.warn{background:var(--warn);color:#fff}
+    table{width:100%;border-collapse:collapse} th,td{padding:10px 12px;border-bottom:1px solid var(--border);text-align:left}
+    th{font-size:12px;color:var(--muted)}
+    .status{display:inline-block;padding:2px 8px;border-radius:999px;font-size:12px;background:#eceff1;color:#607d8b}
+    .status.success{background:#e8f5e9;color:#2e7d32}
+    .status.wait{background:#fff3e0;color:#ef6c00}
+    .legend{font-size:12px;color:#5c6b77}
+    .modal-backdrop{position:fixed;inset:0;background:rgba(0,0,0,.35);display:none;align-items:center;justify-content:center;padding:16px}
+    .modal{width:min(860px,100%);background:#fff;border:1px solid var(--border);border-radius:12px;padding:16px}
+    .grid-2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+    .field{display:flex;flex-direction:column;gap:6px}
+    .label{font-size:12px;color:var(--muted)}
+    input,select{width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:8px;background:#fff;color:var(--text)}
+    .log{background:#0b1020;color:#e5e7eb;border-radius:10px;padding:12px;font-family:ui-monospace,Menlo,monospace;font-size:12px;height:160px;overflow:auto}
+    /* tabs */
+    .tabs{display:flex;gap:24px;align-items:center;border-bottom:1px solid var(--border);margin:0 0 12px 0}
+    .tab{appearance:none;background:none;border:none;padding:12px 0;cursor:pointer;font-size:18px;color:#3a3a3a;position:relative}
+    .tab.active{color:#1a73e8;font-weight:600}
+    .tab.active::after{content:"";position:absolute;left:0;right:0;bottom:-1px;height:2px;background:#1a73e8;border-radius:2px}
+    .hidden{display:none !important}
+  </style>
+</head>
+<body>
+  <div class="layout">
+    <aside class="sidebar">
+      <div class="brand">BPS</div>
+      <a class="nav-link" href="javascript:void(0)">商户管理</a>
+      <a class="nav-link" href="javascript:void(0)">店铺管理</a>
+      <a class="nav-link" href="javascript:void(0)">订单管理</a>
+      <a class="nav-link" href="javascript:void(0)">商品管理</a>
+      <a class="nav-link" href="javascript:void(0)">选品库</a>
+      <a class="nav-link active" href="javascript:void(0)">开票管理</a>
+    </aside>
+
+    <main class="content">
+      <div class="card" style="margin-bottom:12px;">
+        <div style="display:flex;justify-content:space-between;align-items:center;">
+          <h2 style="margin:0;font-size:18px;">开票管理</h2>
+          <div class="legend">选择订单 → 校验状态 → 编辑并提交开票 → 查看结果</div>
+        </div>
+      </div>
+
+      <!-- 标签切换 -->
+      <div class="tabs">
+        <button class="tab active" data-tab="pending">可开票</button>
+        <button class="tab" data-tab="invoiced">已开票</button>
+      </div>
+
+      <div id="tab-pending">
+      <!-- 可开票 条件筛选（可多条件同时生效） -->
+      <div class="card" style="margin-bottom:12px;">
+        <div class="actions" style="flex-wrap:wrap;gap:10px;">
+          <div class="field" style="min-width:220px;flex:1;">
+            <label class="label">平台订单编号</label>
+            <input id="pq-platformOrder" type="text" placeholder="支持模糊匹配" />
+          </div>
+          <div class="field" style="min-width:220px;flex:1;">
+            <label class="label">订单ID</label>
+            <input id="pq-orderId" type="text" placeholder="支持模糊匹配" />
+          </div>
+          <div class="field" style="min-width:220px;flex:1;">
+            <label class="label">买家姓名</label>
+            <input id="pq-buyer" type="text" placeholder="支持模糊匹配" />
+          </div>
+          <div class="field" style="min-width:220px;flex:1;">
+            <label class="label">店铺名称</label>
+            <input id="pq-shop" type="text" placeholder="支持模糊匹配" />
+          </div>
+          <div class="field" style="width:200px;">
+            <label class="label">付款时间（起）</label>
+            <input id="pq-start" type="date" />
+          </div>
+          <div class="field" style="width:200px;">
+            <label class="label">付款时间（止）</label>
+            <input id="pq-end" type="date" />
+          </div>
+          <div class="actions" style="align-self:flex-end;">
+            <button class="btn" id="btn-q-reset">重置</button>
+            <button class="btn warn" id="btn-q-search">搜索</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- 待开票订单（按订单展示） -->
+      <div class="card">
+        <div class="actions" style="justify-content:space-between;margin-bottom:10px;">
+          <div class="actions">
+            <button class="btn" id="btn-sync">从订单管理同步</button>
+            <span class="legend">已选 <span id="sel-count">0</span> 条</span>
+          </div>
+          <div class="actions">
+            <button class="btn" id="btn-clear">清空选择</button>
+            <button class="btn warn" id="btn-validate">开票</button>
+          </div>
+        </div>
+
+        <div style="overflow:auto;">
+          <div style="font-weight:600;margin:0 0 8px 2px;">可开票订单</div>
+          <table>
+            <thead>
+              <tr>
+                <th style="width:36px;"><input type="checkbox" id="chk-all" /></th>
+                <th>平台</th>
+                <th>平台订单编号</th>
+                <th>订单ID</th>
+                <th>买家姓名</th>
+                <th>国家</th>
+                <th>店铺名称</th>
+                <th>订单金额</th>
+                <th>付款时间</th>
+                <th>开票状态</th>
+                <th>操作</th>
+              </tr>
+            </thead>
+            <tbody id="order-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+      </div> <!-- /#tab-pending -->
+
+      <!-- 已开票发票（按发票汇总） -->
+      <div id="tab-invoiced" class="card hidden" style="margin-top:12px;">
+        <div style="font-weight:600;margin:0 0 8px 2px;">已开票</div>
+
+        <!-- 已开票条件筛选（可多条件同时生效） -->
+        <div class="actions" style="flex-wrap:wrap;gap:10px;margin-bottom:10px;">
+          <div class="field" style="min-width:220px;flex:1;">
+            <label class="label">发票号</label>
+            <input id="iq-invoiceNo" type="text" placeholder="支持模糊匹配" />
+          </div>
+          <div class="field" style="min-width:220px;flex:1;">
+            <label class="label">公司</label>
+            <input id="iq-company" type="text" placeholder="支持模糊匹配" />
+          </div>
+          <div class="field" style="min-width:220px;flex:1;">
+            <label class="label">业务员</label>
+            <input id="iq-salesRep" type="text" placeholder="支持模糊匹配" />
+          </div>
+          <div class="field" style="width:200px;">
+            <label class="label">生成时间（起）</label>
+            <input id="iq-start" type="date" />
+          </div>
+          <div class="field" style="width:200px;">
+            <label class="label">生成时间（止）</label>
+            <input id="iq-end" type="date" />
+          </div>
+          <div class="actions" style="align-self:flex-end;">
+            <button class="btn" id="btn-iq-reset">重置</button>
+            <button class="btn warn" id="btn-iq-search">搜索</button>
+          </div>
+        </div>
+
+        <div style="overflow:auto;">
+          <table>
+            <thead>
+              <tr>
+                <th>发票号</th>
+                <th>公司</th>
+                <th>业务员</th>
+                <th>订单数</th>
+                <th>金额汇总</th>
+                <th>生成时间</th>
+                <th>操作</th>
+              </tr>
+            </thead>
+            <tbody id="invoice-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      
+    </main>
+  </div>
+
+  <!-- 开票表单 + 常用信息选择 -->
+  <div class="modal-backdrop" id="form-backdrop">
+    <div class="modal">
+      <h3 style="margin:0 0 8px 0;">编辑开票信息</h3>
+
+      <!-- 常用信息选择区 -->
+      <div class="card" style="padding:12px;margin-bottom:12px;background:#f9fafb;">
+        <div class="actions" style="gap:12px;flex-wrap:wrap;">
+          <div class="field" style="min-width:260px;flex:1;">
+            <label class="label">常用信息</label>
+            <select id="f-common-list"></select>
+          </div>
+          <button class="btn" id="btn-load-common">载入常用信息</button>
+          <button class="btn" id="btn-save-common">保存为常用信息</button>
+          <span class="legend">提示：载入后会覆盖表单当前内容</span>
+        </div>
+      </div>
+
+      <div class="grid-2">
+        <div class="field">
+          <label class="label">Company Name</label>
+          <input id="f-company-name" type="text" placeholder="公司名称" />
+        </div>
+        <div class="field">
+          <label class="label">Company Number</label>
+          <input id="f-company-number" type="text" placeholder="统一社会信用代码/注册号" />
+        </div>
+        <div class="field" style="grid-column:1 / span 2;">
+          <label class="label">Address</label>
+          <input id="f-address" type="text" placeholder="注册地址（国家/省市区/详细地址）" />
+        </div>
+        <div class="field">
+          <label class="label">Invoice Number</label>
+          <input id="f-invoice-number" type="text" placeholder="例如：FP-000001" />
+        </div>
+        <div class="field">
+          <label class="label">Date</label>
+          <input id="f-date" type="date" />
+        </div>
+        <div class="field">
+          <label class="label">Currency</label>
+          <select id="f-currency">
+            <option value="HK$">HK$</option>
+            <option value="USD">$</option>
+            <option value="CNY">CNY</option>
+            <option value="EUR">€</option>
+          </select>
+        </div>
+        <div class="field">
+          <label class="label">金额预览</label>
+          <input id="f-amount-preview" type="text" disabled />
+        </div>
+      </div>
+
+      <div class="actions" style="justify-content:flex-end;margin-top:12px;">
+        <button class="btn" id="btn-close-form">取消</button>
+        <button class="btn primary" id="btn-submit-form">确认开票</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 已开票订单提示 -->
+  <div class="modal-backdrop" id="confirm-backdrop">
+    <div class="modal">
+      <div class="card" style="background: var(--decision); border-style:dashed; margin-bottom:8px;">
+        存在已开票订单，是否继续开票？
+      </div>
+      <div class="actions" style="justify-content:flex-end;">
+        <button class="btn" id="btn-cancel-confirm">否，取消</button>
+        <button class="btn warn" id="btn-continue-confirm">是，继续</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // 订单（来自截图的5条）
+    let orders = [
+      { platform:'Shopify', platformOrder:'#1010', orderId:'64659533726699', buyer:'scale hyb', country:'United States', shop:'mabangtesttest02', amount:368.00, currency:'HK$', paidAt:'2025-09-23 11:00:24', shippedAt:'-', status:'none' },
+      { platform:'Shopify', platformOrder:'#1617', orderId:'116047166818094', buyer:'BingAu User', country:'United States', shop:'mabangtesttest03', amount:1597.00, currency:'HK$', paidAt:'2025-09-19 20:17:37', shippedAt:'-', status:'none' },
+      { platform:'Shopify', platformOrder:'#1612', orderId:'11604715667822', buyer:'BingAu User', country:'United States', shop:'mabangtesttest03', amount:1597.00, currency:'HK$', paidAt:'2025-09-19 20:16:37', shippedAt:'-', status:'success', lastInvoice:{no:'FP-000231', at:'2025-09-20 10:01:00'} },
+      { platform:'Shopify', platformOrder:'#1618', orderId:'11604716650862', buyer:'BingAu User', country:'United States', shop:'mabangtesttest03', amount:1597.00, currency:'HK$', paidAt:'2025-09-19 20:17:38', shippedAt:'-', status:'none' },
+      { platform:'Shopify', platformOrder:'#1671', orderId:'11608074092910', buyer:'wuliang liang', country:'United States', shop:'mabangtesttest03', amount:599.00, currency:'HK$', paidAt:'2025-09-22 18:58:04', shippedAt:'-', status:'fail' }
+    ];
+
+    // 常用信息库（示例）
+    let commonInfos = [
+      { id:'N-001', companyName:'Ecpro Brand Ltd', companyNumber:'BRN-ECPRO-0001', address:'Room 1101, Central Plaza, Hong Kong', currency:'HK$' },
+      { id:'N-002', companyName:'SWIFT DIGITAL SOLUTION (LLC)', companyNumber:'LIC-SWIFT-LLC-0002', address:'Suite 200, Business Bay, Dubai, UAE', currency:'HK$' }
+    ];
+
+    let invoiceDB = [];
+
+    const qs = (s)=>document.querySelector(s);
+    const qsa = (s)=>Array.from(document.querySelectorAll(s));
+    const logEl = qs('#log');
+
+    function log(t){ const ts=new Date().toISOString().replace('T',' ').substring(0,19); logEl.textContent += '['+ts+'] '+t+'\\n'; logEl.scrollTop=logEl.scrollHeight; }
+    function statusTag(s){ if(s==='success')return'<span class="status success">已开票</span>'; if(s==='wait')return'<span class="status wait">开票中</span>'; if(s==='fail')return'<span class="status wait">开票失败</span>'; return'<span class="status">未开票</span>'; }
+    // 将“可开票”界面里的订单状态随机设置为：已开票/未开票
+    function randomizeOrderStatuses(){
+      orders = orders.map(o => {
+        const isSuccess = Math.random() > 0.5;
+        return {
+          ...o,
+          status: isSuccess ? 'success' : 'none',
+          lastInvoice: isSuccess ? (o.lastInvoice || { no: 'AUTO-' + (Math.floor(Math.random()*9000)+1000), at: new Date().toISOString().replace('T',' ').substring(0,19) }) : undefined
+        };
+      });
+    }
+
+    function getQuery(){
+      // 多条件读取（可同时满足多个）
+      const platformOrder = (qs('#pq-platformOrder')?.value || '').trim().toLowerCase();
+      const orderId = (qs('#pq-orderId')?.value || '').trim().toLowerCase();
+      const buyer = (qs('#pq-buyer')?.value || '').trim().toLowerCase();
+      const shop = (qs('#pq-shop')?.value || '').trim().toLowerCase();
+      const start = qs('#pq-start')?.value;
+      const end = qs('#pq-end')?.value;
+      return { platformOrder, orderId, buyer, shop, start, end };
+    }
+
+    function matchValue(val, op, keywords){
+      if(keywords.length===0) return true;
+      const v = String(val ?? '').toLowerCase();
+      if(op==='eq') return keywords.some(k => v === String(k).toLowerCase());
+      return keywords.some(k => v.includes(String(k).toLowerCase()));
+    }
+
+    function renderOrders(){
+      const tbody = qs('#order-tbody');
+      const q = getQuery();
+      const list = orders.filter(o=>{
+        const byPlatformOrder = q.platformOrder ? String(o.platformOrder||'').toLowerCase().includes(q.platformOrder) : true;
+        const byOrderId = q.orderId ? String(o.orderId||'').toLowerCase().includes(q.orderId) : true;
+        const byBuyer = q.buyer ? String(o.buyer||'').toLowerCase().includes(q.buyer) : true;
+        const byShop = q.shop ? String(o.shop||'').toLowerCase().includes(q.shop) : true;
+        let byDate = true;
+        if(q.start || q.end){
+          const t = new Date((o.paidAt||'').replace(' ','T'));
+          if(q.start && t < new Date(q.start)) byDate = false;
+          if(q.end){
+            const endDate = new Date(q.end); endDate.setDate(endDate.getDate()+1);
+            if(t >= endDate) byDate = false;
+          }
+        }
+        return byPlatformOrder && byOrderId && byBuyer && byShop && byDate;
+      });
+
+      tbody.innerHTML = list.map(o=>`
+        <tr data-id="${o.orderId}">
+          <td><input type="checkbox" class="chk-row" /></td>
+          <td>${o.platform}</td>
+          <td>${o.platformOrder}</td>
+          <td>${o.orderId}</td>
+          <td>${o.buyer}</td>
+          <td>${o.country}</td>
+          <td>${o.shop}</td>
+          <td>${o.currency} ${o.amount.toLocaleString()}</td>
+          <td>${o.paidAt}</td>
+          <td>${o.shippedAt}</td>
+          <td>${statusTag(o.status)} ${o.status==='fail' ? '<span class="legend">可重试</span>':''}</td>
+          <td><button class="btn" data-act="edit">开票</button></td>
+        </tr>
+      `).join('');
+      updateSelCount();
+    }
+
+    function toUSD(amount, currency){
+      const rates = { 'USD': 1, 'HK$': 0.128, 'CNY': 0.137, 'EUR': 1.07 };
+      const rate = rates[currency] ?? 1;
+      return Number(amount || 0) * rate;
+    }
+
+    // 编码工具
+    const pad = (n, w) => String(n).padStart(w, '0');
+    const rand = (min, max) => Math.floor(Math.random()*(max-min+1))+min;
+    function makeInvoiceNo(customerCode, date){
+      const d = date ? new Date(date) : new Date();
+      const ymd = d.getFullYear() + pad(d.getMonth()+1,2) + pad(d.getDate(),2); // YYYYMMDD
+      const rnd4 = pad(rand(0,9999),4);
+      return `${pad(customerCode,5)}${ymd}${rnd4}`;
+    }
+
+    function renderInvoiceSummary(){
+      const tbody = qs('#invoice-tbody');
+      // 将 invoiceDB 中成功记录按发票号聚合
+      const map = new Map();
+      invoiceDB.filter(r=>r.status==='success').forEach(r=>{
+        if(!map.has(r.invoiceNo)){
+          map.set(r.invoiceNo, { invoiceNo:r.invoiceNo, companyName:r.companyName, date:r.date, at:r.at, salesRep:r.salesRep||'-', orders:[] });
+        }
+        map.get(r.invoiceNo).orders.push(r.orderId);
+      });
+
+      // 多条件读取
+      const qInv = (qs('#iq-invoiceNo')?.value || '').trim().toLowerCase();
+      const qCom = (qs('#iq-company')?.value || '').trim().toLowerCase();
+      const qSales = (qs('#iq-salesRep')?.value || '').trim().toLowerCase();
+
+      function invMatch(group){
+        const byInv = qInv ? String(group.invoiceNo||'').toLowerCase().includes(qInv) : true;
+        const byCom = qCom ? String(group.companyName||'').toLowerCase().includes(qCom) : true;
+        const bySales = qSales ? String(group.salesRep||'').toLowerCase().includes(qSales) : true;
+        return byInv && byCom && bySales;
+      }
+
+      // 生成时间范围过滤
+      const start = qs('#iq-start')?.value;
+      const end = qs('#iq-end')?.value;
+      function withinRange(group){
+        if(!start && !end) return true;
+        const t = new Date(group.at.replace(' ','T')); // group.at: YYYY-MM-DD HH:mm:ss
+        if(start && t < new Date(start)) return false;
+        if(end) {
+          const endDate = new Date(end);
+          endDate.setDate(endDate.getDate()+1); // 包含当天
+          if(t >= endDate) return false;
+        }
+        return true;
+      }
+
+      const rows = Array.from(map.values()).filter(invMatch).filter(withinRange).map(group=>{
+        // 依据订单ID汇总金额（按币种分组）
+        const involved = orders.filter(o=>group.orders.includes(o.orderId));
+        const totalUSD = involved.reduce((sum,o)=> sum + toUSD(o.amount, o.currency), 0);
+        const totalText = '$ ' + totalUSD.toLocaleString(undefined,{minimumFractionDigits:2, maximumFractionDigits:2});
+        return `
+          <tr data-inv="${group.invoiceNo}">
+            <td>${group.invoiceNo}</td>
+            <td>${group.companyName}</td>
+            <td>${group.salesRep}</td>
+            <td>${group.orders.length}</td>
+            <td>${totalText || '-'}</td>
+            <td>${group.at}</td>
+            <td><button class="btn" data-act="download-invoice">下载</button></td>
+          </tr>
+        `;
+      }).join('');
+
+      tbody.innerHTML = rows || '<tr><td colspan="7" class="legend">暂无数据</td></tr>';
+    }
+
+    // 生成5条随机的已开票发票汇总（海外公司英文名），并与现有订单绑定
+    function seedInitialInvoices(){
+      if (invoiceDB.length > 0) return; // 已有记录则不重复生成
+      const companies = [
+        'Oceanic Trading Ltd',
+        'Nova Global Holdings Inc.',
+        'Aurora Tech Pte. Ltd.',
+        'Blue Harbor Logistics GmbH',
+        'Vertex Digital FZ-LLC'
+      ];
+      const salesPool = ['Alice', 'Bob', 'Carol', 'David', 'Eva'];
+      const now = new Date();
+      let startIdx = 0;
+      for (let i = 0; i < 5; i++) {
+        const customerCode = rand(10000, 99999);
+        const invNo = makeInvoiceNo(customerCode);
+        const d = new Date(now.getTime() - (i*86400000));
+        const dateStr = d.toISOString().substring(0,10);
+        const atStr = d.toISOString().replace('T',' ').substring(0,19);
+        const company = companies[i % companies.length];
+        const salesRep = salesPool[i % salesPool.length];
+        const count = Math.max(1, Math.min(5, Math.floor(Math.random()*5)+1)); // 1-5
+        for (let j = 0; j < count; j++) {
+          const o = orders[(startIdx + j) % orders.length];
+          invoiceDB.push({
+            orderId: o.orderId,
+            invoiceNo: invNo,
+            companyName: company,
+            date: dateStr,
+            currency: 'USD',
+            at: atStr,
+            salesRep,
+            status: 'success'
+          });
+        }
+        startIdx += count;
+      }
+    }
+    function updateSelCount(){ qs('#sel-count').textContent = qsa('.chk-row:checked').length; }
+    function getSelectedIds(){ return qsa('#order-tbody tr').filter(tr=>tr.querySelector('.chk-row').checked).map(tr=>tr.getAttribute('data-id')); }
+
+    // 常用信息渲染与载入
+    function renderCommonSelect(){
+      const sel = qs('#f-common-list');
+      sel.innerHTML = '<option value="">选择常用信息</option>' + commonInfos.map(c=>`<option value="${c.id}">${c.companyName}</option>`).join('');
+    }
+    function loadCommonToForm(id){
+      const c = commonInfos.find(x=>x.id===id); if(!c) return;
+      qs('#f-company-name').value = c.companyName || '';
+      qs('#f-company-number').value = c.companyNumber || '';
+      qs('#f-address').value = c.address || '';
+      qs('#f-currency').value = c.currency || 'HK$';
+      refreshAmountPreview();
+      log('已载入常用信息：'+ c.companyName);
+    }
+    function saveCurrentToCommon(){
+      const obj = {
+        id: 'N-' + String(commonInfos.length+1).padStart(3,'0'),
+        companyName: qs('#f-company-name').value.trim(),
+        companyNumber: qs('#f-company-number').value.trim(),
+        address: qs('#f-address').value.trim(),
+        currency: qs('#f-currency').value
+      };
+      if(!obj.companyName || !obj.companyNumber){ alert('请至少填写 Company Name 与 Company Number'); return; }
+      const dup = commonInfos.find(c=>c.companyName===obj.companyName && c.companyNumber===obj.companyNumber);
+      if(!dup){ commonInfos.push(obj); renderCommonSelect(); log('已保存为常用信息：'+obj.companyName); }
+    }
+
+    // 表单逻辑
+    let selectedOrdersCache = [];
+    let currentCurrency = 'HK$';
+
+    function openFormPrefill(selectedIds){
+      selectedOrdersCache = selectedIds.map(id=>orders.find(o=>o.orderId===id)).filter(Boolean);
+      const first = selectedOrdersCache[0];
+      currentCurrency = first?.currency || 'HK$';
+      qs('#f-company-name').value = first?.shop || '';
+      qs('#f-company-number').value = '';
+      qs('#f-address').value = first?.country ? (first.country + ' / (填写详细地址)') : '';
+      qs('#f-invoice-number').value = 'FP-' + (Math.floor(Math.random()*900000)+100000);
+      qs('#f-date').valueAsDate = new Date();
+      qs('#f-currency').value = currentCurrency;
+      renderCommonSelect();
+      refreshAmountPreview();
+      qs('#form-backdrop').style.display='flex';
+    }
+    function closeForm(){ qs('#form-backdrop').style.display='none'; }
+    function openConfirm(){ qs('#confirm-backdrop').style.display='flex'; }
+    function closeConfirm(){ qs('#confirm-backdrop').style.display='none'; }
+
+    function refreshAmountPreview(){
+      const sum = selectedOrdersCache.reduce((a,b)=>a + Number(b.amount||0), 0);
+      qs('#f-amount-preview').value = (qs('#f-currency').value || 'HK$') + ' ' + sum.toLocaleString();
+    }
+
+    function bindEvents(){
+      qs('#chk-all').addEventListener('change', e=>{ const on=e.target.checked; qsa('.chk-row').forEach(ch=>ch.checked=on); updateSelCount(); });
+      document.addEventListener('change', e=>{ if(e.target.classList.contains('chk-row')) updateSelCount(); });
+      qs('#btn-clear').addEventListener('click', ()=>{ qsa('.chk-row').forEach(ch=>ch.checked=false); qs('#chk-all').checked=false; updateSelCount(); });
+      qs('#btn-sync').addEventListener('click', ()=> log('已与订单管理同步（模拟）'));
+
+      // 搜索与重置
+      if(qs('#btn-q-search')){
+        qs('#btn-q-search').addEventListener('click', ()=>{ renderOrders(); log('已执行搜索筛选'); });
+      }
+      // 已开票检索
+      if(qs('#btn-iq-search')){
+        qs('#btn-iq-search').addEventListener('click', ()=>{ renderInvoiceSummary(); });
+      }
+      if(qs('#btn-iq-reset')){
+        qs('#btn-iq-reset').addEventListener('click', ()=>{
+          if(qs('#iq-invoiceNo')) qs('#iq-invoiceNo').value = '';
+          if(qs('#iq-company')) qs('#iq-company').value = '';
+          if(qs('#iq-salesRep')) qs('#iq-salesRep').value = '';
+          if(qs('#iq-start')) qs('#iq-start').value = '';
+          if(qs('#iq-end')) qs('#iq-end').value = '';
+          renderInvoiceSummary();
+        });
+      }
+      if(qs('#btn-q-reset')){
+        qs('#btn-q-reset').addEventListener('click', ()=>{
+          if(qs('#pq-platformOrder')) qs('#pq-platformOrder').value = '';
+          if(qs('#pq-orderId')) qs('#pq-orderId').value = '';
+          if(qs('#pq-buyer')) qs('#pq-buyer').value = '';
+          if(qs('#pq-shop')) qs('#pq-shop').value = '';
+          if(qs('#pq-start')) qs('#pq-start').value = '';
+          if(qs('#pq-end')) qs('#pq-end').value = '';
+          renderOrders();
+        });
+      }
+
+      document.addEventListener('click', (e)=>{
+        const btn = e.target.closest('button'); if(!btn) return;
+        if(btn.getAttribute('data-act')==='edit'){
+          const id = btn.closest('tr').getAttribute('data-id');
+          openFormPrefill([id]); log('单笔开票：'+id);
+        } else if(btn.getAttribute('data-act')==='download-invoice'){
+          const inv = btn.closest('tr').getAttribute('data-inv');
+          triggerDownloadByInvoice(inv);
+        }
+        const tabBtn = e.target.closest('.tab');
+        if(tabBtn){
+          qsa('.tab').forEach(t=>t.classList.remove('active'));
+          tabBtn.classList.add('active');
+          const which = tabBtn.getAttribute('data-tab');
+          if(which==='pending'){
+            qs('#tab-pending').classList.remove('hidden');
+            qs('#tab-invoiced').classList.add('hidden');
+          } else {
+            qs('#tab-pending').classList.add('hidden');
+            qs('#tab-invoiced').classList.remove('hidden');
+            renderInvoiceSummary();
+          }
+        }
+      });
+
+      qs('#btn-validate').addEventListener('click', ()=>{
+        const ids = getSelectedIds();
+        if(ids.length===0){ alert('请先选择订单'); return; }
+        const hasInvoiced = ids.some(id => (orders.find(o=>o.orderId===id)?.status)==='success');
+        if(hasInvoiced){ openConfirm(); log('存在已开票订单，弹出确认'); } else { openFormPrefill(ids); }
+      });
+      qs('#btn-cancel-confirm').addEventListener('click', ()=>{ closeConfirm(); log('取消开票'); });
+      qs('#btn-continue-confirm').addEventListener('click', ()=>{ closeConfirm(); openFormPrefill(getSelectedIds()); });
+
+      // 常用信息交互
+      qs('#btn-load-common').addEventListener('click', ()=>{ const id=qs('#f-common-list').value; if(id) loadCommonToForm(id); });
+      qs('#btn-save-common').addEventListener('click', saveCurrentToCommon);
+
+      // 表单交互
+      qs('#f-currency').addEventListener('change', refreshAmountPreview);
+      qs('#btn-close-form').addEventListener('click', closeForm);
+
+      qs('#btn-submit-form').addEventListener('click', ()=>{
+        const data = {
+          companyName: qs('#f-company-name').value.trim(),
+          companyNumber: qs('#f-company-number').value.trim(),
+          address: qs('#f-address').value.trim(),
+          invoiceNumber: qs('#f-invoice-number').value.trim(),
+          date: qs('#f-date').value,
+          currency: qs('#f-currency').value
+        };
+        if(!data.companyName || !data.companyNumber || !data.address || !data.invoiceNumber || !data.date){
+          alert('请完整填写表单信息'); return;
+        }
+        closeForm();
+        const ids = selectedOrdersCache.map(o=>o.orderId);
+        orders = orders.map(o => ids.includes(o.orderId) ? { ...o, status:'wait' } : o);
+        renderOrders();
+        log('执行开票中...');
+
+        setTimeout(()=>{
+          ids.forEach(id=>{
+            const success = Math.random()>0.05;
+            // 若手填了发票号则使用，否则按规则生成（客户编号取公司号数字部分前5位，不足随机补齐）
+            let invNo = (data.invoiceNumber || '').trim();
+            if(!invNo){
+              const digits = (data.companyNumber || '').replace(/\D/g,'');
+              const customerCode = digits ? Number(digits.slice(0,5).padEnd(5,'0')) : rand(10000,99999);
+              invNo = makeInvoiceNo(customerCode, data.date);
+            }
+            const now = new Date().toISOString().replace('T',' ').substring(0,19);
+            invoiceDB.push({ orderId:id, invoiceNo:invNo, companyName:data.companyName, date:data.date, currency:data.currency, at:now, status:success?'success':'fail' });
+            const idx = orders.findIndex(o=>o.orderId===id);
+            if(idx>=0){
+              orders[idx] = { ...orders[idx], status: success?'success':'fail', lastInvoice: success?{no:invNo, at:now}:orders[idx].lastInvoice };
+            }
+            log((success?'成功':'失败')+'：订单 '+id+' 发票 '+invNo);
+          });
+          renderOrders();
+          renderInvoiceSummary();
+        }, 900);
+      });
+    }
+
+    function triggerDownload(orderId){
+      // 找到该订单的最新成功发票
+      const rec = [...invoiceDB].reverse().find(x => x.orderId===orderId && x.status==='success');
+      if(!rec){ alert('暂无可下载的发票'); return; }
+
+      // 识别是否为同一张发票（同一 invoiceNo 的多订单）
+      const sameInvoiceRecords = invoiceDB.filter(x => x.invoiceNo===rec.invoiceNo && x.status==='success');
+      const orderIds = sameInvoiceRecords.map(r=>r.orderId);
+      const involvedOrders = orders.filter(o => orderIds.includes(o.orderId));
+
+      // 汇总金额（按币种单独汇总，避免混币种）
+      const totalsByCurrency = involvedOrders.reduce((acc, o) => {
+        const cur = o.currency || rec.currency || '';
+        acc[cur] = (acc[cur] || 0) + Number(o.amount||0);
+        return acc;
+      }, {});
+
+      const header = [
+        `Invoice No: ${rec.invoiceNo}`,
+        `Company: ${rec.companyName}`,
+        `Date: ${rec.date}`,
+        `Generated At: ${rec.at}`,
+        `Orders Count: ${involvedOrders.length}`,
+        `Totals: ` + Object.keys(totalsByCurrency).map(c=>`${c} ${totalsByCurrency[c].toLocaleString()}`).join(' | '),
+        `----------------------------------------`,
+        `Items:`
+      ].join('\n');
+
+      const lines = involvedOrders.map(o => `- Order ${o.orderId} | ${o.shop} | ${o.currency} ${o.amount.toLocaleString()} | Buyer: ${o.buyer}`);
+      const content = header + '\n' + lines.join('\n');
+
+      const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${rec.invoiceNo}.txt`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    }
+
+    function triggerDownloadByInvoice(invoiceNo){
+      const recAny = [...invoiceDB].reverse().find(x => x.invoiceNo===invoiceNo && x.status==='success');
+      if(!recAny){ alert('暂无可下载的发票'); return; }
+      const same = invoiceDB.filter(x => x.invoiceNo===invoiceNo && x.status==='success');
+      const orderIds = same.map(r=>r.orderId);
+      const involvedOrders = orders.filter(o => orderIds.includes(o.orderId));
+      const totalsByCurrency = involvedOrders.reduce((acc, o) => {
+        const cur = o.currency || recAny.currency || '';
+        acc[cur] = (acc[cur] || 0) + Number(o.amount||0);
+        return acc;
+      }, {});
+      const header = [
+        `Invoice No: ${invoiceNo}`,
+        `Company: ${recAny.companyName}`,
+        `Date: ${recAny.date}`,
+        `Generated At: ${recAny.at}`,
+        `Orders Count: ${involvedOrders.length}`,
+        `Totals: ` + Object.keys(totalsByCurrency).map(c=>`${c} ${totalsByCurrency[c].toLocaleString()}`).join(' | '),
+        `----------------------------------------`,
+        `Items:`
+      ].join('\n');
+      const lines = involvedOrders.map(o => `- Order ${o.orderId} | ${o.shop} | ${o.currency} ${o.amount.toLocaleString()} | Buyer: ${o.buyer}`);
+      const content = header + '\n' + lines.join('\n');
+      const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${invoiceNo}.txt`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    }
+
+function init(){ seedInitialInvoices(); randomizeOrderStatuses(); renderOrders(); renderInvoiceSummary(); bindEvents(); log('开票管理已加载'); }
+    document.addEventListener('DOMContentLoaded', init);
+  </script>
+</body>
+</html>
