@@ -1,0 +1,1410 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>BPS - 开票管理（交互原型）</title>
+  <style>
+    :root {
+      --bg:#f7f8fa;--card:#fff;--text:#1f2d3d;--muted:#5c6b77;--primary:#2e7d32;--primary-600:#256e2a;
+      --warn:#ff8f00;--border:#e6e8eb;--decision:#fff3e0;
+    }
+    *{box-sizing:border-box} html,body{height:100%}
+    body{margin:0;background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,'PingFang SC','Hiragino Sans GB','Microsoft Yahei',sans-serif}
+    .layout{display:grid;grid-template-columns:260px 1fr;min-height:100vh}
+    .sidebar{background:#fff;border-right:1px solid var(--border);padding:16px}
+    .brand{font-weight:700;font-size:16px;margin-bottom:12px;color:#0277bd}
+    .nav-link{display:block;padding:8px 10px;color:var(--text);text-decoration:none;border-radius:6px;margin-bottom:4px}
+    .nav-link.active,.nav-link:hover{background:#f1f5f9}
+    .content{padding:20px}
+    .card{background:#fff;border:1px solid var(--border);border-radius:12px;padding:16px}
+    .actions{display:flex;gap:8px;align-items:center}
+    .btn{border:1px solid var(--border);background:#fff;color:var(--text);border-radius:10px;padding:8px 12px;cursor:pointer}
+    .btn.primary{background:var(--primary);color:#fff;border-color:var(--primary-600)}
+    .btn.warn{background:var(--warn);color:#fff}
+    table{width:100%;border-collapse:collapse} th,td{padding:14px 12px;border-bottom:1px solid var(--border);text-align:left}
+    /* 放宽可开票订单的行距 */
+    #tab-pending table th, #tab-pending table td { padding: 18px 16px; }
+    #tab-pending tbody tr { border-bottom: 1px solid var(--border); }
+    /* 可开票：避免换行（平台订单编号、履约价格、开票状态） */
+    #tab-pending table th:nth-child(2),
+    #tab-pending table td:nth-child(2),
+    #tab-pending table th:nth-child(7),
+    #tab-pending table td:nth-child(7),
+    #tab-pending table th:nth-child(8),
+    #tab-pending table td:nth-child(8){
+      white-space: nowrap;
+    }
+    th{font-size:12px;color:var(--muted)}
+    .status{display:inline-block;padding:2px 8px;border-radius:999px;font-size:12px;background:#eceff1;color:#607d8b}
+    .status.success{background:#e8f5e9;color:#2e7d32}
+    .status.wait{background:#fff3e0;color:#ef6c00}
+    .status.processing{background:#e3f2fd;color:#1565c0}
+    .status.failed{background:#ffebee;color:#c62828}
+    .legend{font-size:12px;color:#5c6b77}
+    .modal-backdrop{position:fixed;inset:0;background:rgba(0,0,0,.35);display:none;align-items:center;justify-content:center;padding:16px}
+    .modal{width:min(860px,100%);background:#fff;border:1px solid var(--border);border-radius:12px;padding:16px}
+    .grid-2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+    .field{display:flex;flex-direction:column;gap:6px}
+    .label{font-size:12px;color:var(--muted)}
+    input,select{width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:8px;background:#fff;color:var(--text)}
+    .log{background:#0b1020;color:#e5e7eb;border-radius:10px;padding:12px;font-family:ui-monospace,Menlo,monospace;font-size:12px;height:160px;overflow:auto}
+    /* tabs */
+    .tabs{display:flex;gap:24px;align-items:center;border-bottom:1px solid var(--border);margin:0 0 12px 0}
+    .tab{appearance:none;background:none;border:none;padding:12px 0;cursor:pointer;font-size:18px;color:#3a3a3a;position:relative}
+    .tab.active{color:#1a73e8;font-weight:600}
+    .tab.active::after{content:"";position:absolute;left:0;right:0;bottom:-1px;height:2px;background:#1a73e8;border-radius:2px}
+    .hidden{display:none !important}
+    /* filters */
+    .filters-grid{display:grid;grid-template-columns:repeat(6,1fr);gap:10px;align-items:end}
+    .filters-grid-5{display:grid;grid-template-columns:repeat(5,1fr);gap:10px;align-items:end}
+    .filters-actions{display:flex;justify-content:flex-end;gap:10px;margin-top:8px}
+    /* pagination */
+    .pg{display:flex;align-items:center;gap:8px}
+    .pg .total{color:var(--muted);font-size:12px;margin-right:8px}
+    .pg .btn{padding:6px 10px;border-radius:8px}
+    .pg .num{min-width:32px;height:32px;border:1px solid var(--border);border-radius:8px;display:flex;align-items:center;justify-content:center;cursor:pointer}
+    .pg .num.active{border-color:#1a73e8;color:#1a73e8;font-weight:600}
+    .pg .pp{position:relative}
+    .pg .pp-select{width:110px}
+    .pg .goto{display:flex;align-items:center;gap:6px}
+    .pg input[type="number"]{width:70px;padding:6px 8px;border:1px solid var(--border);border-radius:8px}
+  </style>
+</head>
+<body>
+  <div class="layout">
+    <aside class="sidebar">
+      <div class="brand">BPS</div>
+      <a class="nav-link" href="javascript:void(0)">商户管理</a>
+      <a class="nav-link" href="javascript:void(0)">店铺管理</a>
+      <a class="nav-link" href="javascript:void(0)">订单管理</a>
+      <a class="nav-link" href="javascript:void(0)">商品管理</a>
+      <a class="nav-link" href="javascript:void(0)">选品库</a>
+      <a class="nav-link active" href="javascript:void(0)">开票管理</a>
+    </aside>
+
+    <main class="content">
+      <div class="card" style="margin-bottom:12px;">
+        <div style="display:flex;justify-content:space-between;align-items:center;">
+          <h2 style="margin:0;font-size:18px;">开票管理</h2>
+          <div class="legend">选择订单 → 校验状态 → 编辑并提交开票 → 查看结果</div>
+        </div>
+      </div>
+
+      <!-- 标签切换 -->
+      <div class="tabs">
+        <button class="tab active" data-tab="pending">开票申请</button>
+        <button class="tab" data-tab="invoiced">开票查询</button>
+      </div>
+
+      <div id="tab-pending">
+      <!-- 可开票 条件筛选（可多条件同时生效） -->
+      <div class="card" style="margin-bottom:12px;">
+        <div class="filters-grid">
+          <div class="field">
+            <label class="label">客户名</label>
+            <input id="pq-buyer" type="text" placeholder="支持模糊匹配" />
+          </div>
+          <div class="field">
+            <label class="label">店铺名称</label>
+            <input id="pq-shop" type="text" placeholder="支持模糊匹配" />
+          </div>
+          <div class="field">
+            <label class="label">平台订单编号</label>
+            <input id="pq-platformOrder" type="text" placeholder="支持模糊匹配" />
+          </div>
+          <div class="field">
+            <label class="label">订单ID</label>
+            <input id="pq-orderId" type="text" placeholder="支持模糊匹配" />
+          </div>
+          <div class="field">
+            <label class="label">付款时间（起）</label>
+            <input id="pq-start" type="date" />
+          </div>
+          <div class="field">
+            <label class="label">付款时间（止）</label>
+            <input id="pq-end" type="date" />
+          </div>
+          <div class="field">
+            <label class="label">开票状态</label>
+            <select id="pq-status">
+              <option value="">全部</option>
+              <option value="success">已开票</option>
+              <option value="none">未开票</option>
+            </select>
+          </div>
+          <div class="filters-actions" style="grid-column:1 / -1;">
+            <button class="btn" id="btn-q-reset">重置</button>
+            <button class="btn warn" id="btn-q-search">搜索</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- 待开票订单（按订单展示） -->
+      <div class="card">
+        <div class="actions" style="justify-content:space-between;margin-bottom:10px;">
+          <div class="actions">
+            <span class="legend">已选 <span id="sel-count">0</span> 条</span>
+          </div>
+          <div class="actions">
+            <button class="btn" id="btn-clear">清空选择</button>
+            <button class="btn warn" id="btn-validate">开票</button>
+          </div>
+        </div>
+
+        <div style="overflow:auto;">
+          <table>
+            <thead>
+              <tr>
+                <th style="width:36px;"><input type="checkbox" id="chk-all" /></th>
+                <th>客户名</th>
+                <th>店铺名称</th>
+                <th>平台订单编号</th>
+                <th>订单ID</th>
+                <th>国家</th>
+                <th>履约价格</th>
+                <th>付款时间</th>
+                <th>开票状态</th>
+              </tr>
+            </thead>
+            <tbody id="order-tbody"></tbody>
+          </table>
+          <!-- 分页器 -->
+          <div id="order-pager" style="display:flex;align-items:center;gap:12px;justify-content:flex-end;padding:10px 0 4px 0;flex-wrap:wrap;"></div>
+        </div>
+      </div>
+      </div> <!-- /#tab-pending -->
+
+      <!-- 已开票发票（按发票汇总） -->
+      <div id="tab-invoiced" class="hidden" style="margin-top:12px;">
+        <div class="card" style="margin-bottom:12px;">
+          <!-- 已开票条件筛选（可多条件同时生效） -->
+          <div class="filters-grid-5">
+          <div class="field">
+            <label class="label">发票号</label>
+            <input id="iq-invoiceNo" type="text" placeholder="支持模糊匹配" />
+          </div>
+          <div class="field">
+            <label class="label">开票人</label>
+            <input id="iq-salesRep" type="text" placeholder="支持模糊匹配" />
+          </div>
+          <div class="field">
+            <label class="label">付款公司</label>
+            <input id="iq-company" type="text" placeholder="支持模糊匹配" />
+          </div>
+          <div class="field">
+            <label class="label">提交时间（起）</label>
+            <input id="iq-start" type="date" />
+          </div>
+          <div class="field">
+            <label class="label">提交时间（止）</label>
+            <input id="iq-end" type="date" />
+          </div>
+          <div class="field">
+            <label class="label">状态</label>
+            <select id="iq-status">
+              <option value="">全部</option>
+              <option value="processing">处理中</option>
+              <option value="success">已完成</option>
+              <option value="failed">失败</option>
+            </select>
+          </div>
+          <div class="filters-actions" style="grid-column:1 / -1;">
+            <button class="btn" id="btn-iq-reset">重置</button>
+            <button class="btn warn" id="btn-iq-search">搜索</button>
+          </div>
+          </div>
+        </div>
+
+        <div class="card" style="overflow:auto;">
+          <table>
+            <thead>
+              <tr>
+                <th>发票号</th>
+                <th>付款公司</th>
+                <th>开票人</th>
+                <th>订单数</th>
+                <th>金额汇总</th>
+                <th>提交时间</th>
+                <th>状态</th>
+                <th>操作</th>
+              </tr>
+            </thead>
+            <tbody id="invoice-tbody"></tbody>
+          </table>
+          <!-- 已开票分页器 -->
+          <div id="invoice-pager" style="display:flex;align-items:center;gap:12px;justify-content:flex-end;padding:10px 0 4px 0;flex-wrap:wrap;"></div>
+        </div>
+      </div>
+
+      
+    </main>
+  </div>
+
+  <!-- 选择发票模版 -->
+  <div class="modal-backdrop" id="tpl-backdrop">
+    <div class="modal">
+      <h3 style="margin:0 0 8px 0;">选择发票模版</h3>
+      <div class="card" style="padding:12px; margin-bottom:12px;">
+        <div class="field" style="min-width:260px;">
+          <label class="label">发票模版</label>
+          <select id="tpl-select">
+            <option value="">请选择发票模版</option>
+          </select>
+        </div>
+      </div>
+      <div class="actions" style="justify-content:flex-end;">
+        <button class="btn" id="btn-cancel-tpl">取消</button>
+        <button class="btn warn" id="btn-next-tpl">下一步</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 开票表单 + 常用信息选择 -->
+  <div class="modal-backdrop" id="form-backdrop">
+    <div class="modal">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin:0 0 8px 0;">
+        <h3 style="margin:0;">编辑开票信息</h3>
+        <button class="btn" id="btn-manage-common">常用信息库</button>
+      </div>
+
+      <!-- 常用信息选择区 -->
+      <div class="card" style="padding:12px;margin-bottom:12px;background:#f9fafb;">
+        <div class="actions" style="gap:12px;flex-wrap:wrap;">
+          <div class="field" style="min-width:260px;flex:1;">
+            <label class="label">常用信息</label>
+            <select id="f-common-list"></select>
+          </div>
+          <button class="btn" id="btn-load-common">载入常用信息</button>
+          <span class="legend">提示：载入后会覆盖表单当前内容</span>
+        </div>
+      </div>
+
+      <div class="grid-2">
+        <div class="field">
+          <label class="label">Company Name</label>
+          <input id="f-company-name" type="text" placeholder="公司名称" />
+        </div>
+        <div class="field">
+          <label class="label">Company Number</label>
+          <input id="f-company-number" type="text" placeholder="统一社会信用代码/注册号" />
+        </div>
+        <div class="field" style="grid-column:1 / span 2;">
+          <label class="label">Address</label>
+          <input id="f-address" type="text" placeholder="注册地址（国家/省市区/详细地址）" />
+        </div>
+        <div class="field">
+          <label class="label">Contact Person <span class="legend">(选填)</span></label>
+          <input id="f-contact-person" type="text" placeholder="联系人姓名" />
+        </div>
+        <div class="field">
+          <label class="label">Contact Number</label>
+          <input id="f-contact-number" type="text" placeholder="联系人电话" />
+        </div>
+        <div class="field">
+          <label class="label">Email <span class="legend">(选填)</span></label>
+          <input id="f-email" type="email" placeholder="邮箱地址" />
+        </div>
+        
+        <div class="field">
+          <label class="label">Date</label>
+          <input id="f-date" type="date" />
+        </div>
+        <div class="field">
+          <label class="label">Currency</label>
+          <select id="f-currency">
+            <option value="HKD">HKD</option>
+            <option value="USD">USD</option>
+            <option value="CNY">CNY</option>
+            <option value="EUR">EUR</option>
+          </select>
+        </div>
+        <div class="field">
+          <label class="label">Amount</label>
+          <input id="f-amount-override" type="number" step="0.01" min="0" placeholder="可在此修改价格" />
+        </div>
+
+        <div class="field" style="grid-column:1 / span 2; margin-top:8px;">
+          <label class="label" style="font-weight:600;">BANK INFORMATION</label>
+        </div>
+        <div class="field">
+          <label class="label">Bank name</label>
+          <input id="f-bank-name" type="text" placeholder="银行名称" />
+        </div>
+        <div class="field">
+          <label class="label">Bank address</label>
+          <input id="f-bank-address" type="text" placeholder="银行地址" />
+        </div>
+        <div class="field">
+          <label class="label">IBAN</label>
+          <input id="f-iban" type="text" placeholder="国际银行账号（IBAN）" />
+        </div>
+        <div class="field">
+          <label class="label">BIC</label>
+          <input id="f-bic" type="text" placeholder="银行识别码（BIC/SWIFT）" />
+        </div>
+        <div class="field" style="grid-column:1 / span 2;">
+          <label class="label">Beneficiary name</label>
+          <input id="f-beneficiary" type="text" placeholder="收款人名称" />
+        </div>
+      </div>
+
+      <div class="actions" style="justify-content:flex-end;margin-top:12px;gap:10px;align-items:center;">
+        <button class="btn" id="btn-close-form">取消</button>
+        <button class="btn primary" id="btn-submit-form">确认开票</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 已开票订单提示 -->
+  <div class="modal-backdrop" id="confirm-backdrop">
+    <div class="modal">
+      <div class="card" style="background: var(--decision); border-style:dashed; margin-bottom:8px;">
+        存在已开票订单，是否继续开票？
+      </div>
+      <div class="actions" style="justify-content:flex-end;">
+        <button class="btn" id="btn-cancel-confirm">否，取消</button>
+        <button class="btn warn" id="btn-continue-confirm">是，继续</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 提交结果通知 -->
+  <div class="modal-backdrop" id="notice-backdrop" style="display:none;">
+    <div class="modal">
+      <div class="card" style="background:#F0F9FF;border-style:dashed;margin-bottom:12px;">
+        <h4 style="margin:0 0 8px 0;color:#1565c0;">开票申请已提交</h4>
+        <p style="margin:0;color:#555;">已提交开票申请，请前往"开票查询"界面查看开票结果。</p>
+      </div>
+      <div class="actions" style="justify-content:space-between;align-items:center;margin-top:12px;">
+        <label class="label" style="display:flex;align-items:center;gap:6px;margin:0;color:var(--text);font-size:14px;cursor:pointer;">
+          <input type="checkbox" id="chk-save-common" style="margin:0;width:auto;" /> 保存到常用信息库
+        </label>
+        <div style="display:flex;gap:10px;">
+          <button class="btn" id="btn-notice-close">知道了</button>
+          <button class="btn warn" id="btn-notice-goto">去查看</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 常用信息库管理 -->
+  <div class="modal-backdrop" id="common-backdrop">
+    <div class="modal">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin:0 0 8px 0;">
+        <h3 style="margin:0;">常用信息库</h3>
+      </div>
+      <div class="actions" style="justify-content:space-between;margin-bottom:8px;">
+        <span class="legend">新增 / 编辑 / 删除常用信息，用于快速填充开票表单</span>
+        <button class="btn" id="btn-common-add">新增常用信息</button>
+      </div>
+      <div style="overflow:auto;max-height:320px;border:1px solid var(--border);border-radius:8px;">
+        <table style="width:100%;border-collapse:collapse;">
+          <thead>
+            <tr>
+              <th>公司名称</th>
+              <th>公司编号</th>
+              <th>地址</th>
+              <th>币种</th>
+              <th>操作</th>
+            </tr>
+          </thead>
+          <tbody id="common-tbody"></tbody>
+        </table>
+      </div>
+      <div id="cm-form" class="grid-2" style="margin-top:12px; display:none;">
+        <div class="field">
+          <label class="label">Company Name</label>
+          <input id="cm-name" type="text" placeholder="公司名称" />
+        </div>
+        <div class="field">
+          <label class="label">Company Number</label>
+          <input id="cm-number" type="text" placeholder="统一社会信用代码/注册号" />
+        </div>
+        <div class="field" style="grid-column:1 / span 2;">
+          <label class="label">Address</label>
+          <input id="cm-address" type="text" placeholder="注册地址（国家/省市区/详细地址）" />
+        </div>
+        <div class="field">
+          <label class="label">Contact Person <span class="legend">(选填)</span></label>
+          <input id="cm-contact-person" type="text" placeholder="联系人姓名" />
+        </div>
+        <div class="field">
+          <label class="label">Contact Number</label>
+          <input id="cm-contact-number" type="text" placeholder="联系人电话" />
+        </div>
+        <div class="field">
+          <label class="label">Email <span class="legend">(选填)</span></label>
+          <input id="cm-email" type="email" placeholder="邮箱地址" />
+        </div>
+        <div class="field">
+          <label class="label">Currency</label>
+          <select id="cm-currency">
+            <option value="HKD">HKD</option>
+            <option value="USD">USD</option>
+            <option value="CNY">CNY</option>
+            <option value="EUR">EUR</option>
+          </select>
+        </div>
+        
+        <div class="field" style="grid-column:1 / span 2; margin-top:8px;">
+          <label class="label" style="font-weight:600;">BANK INFORMATION</label>
+        </div>
+        <div class="field">
+          <label class="label">Bank name</label>
+          <input id="cm-bank-name" type="text" placeholder="银行名称" />
+        </div>
+        <div class="field">
+          <label class="label">Bank address</label>
+          <input id="cm-bank-address" type="text" placeholder="银行地址" />
+        </div>
+        <div class="field">
+          <label class="label">IBAN</label>
+          <input id="cm-iban" type="text" placeholder="国际银行账号（IBAN）" />
+        </div>
+        <div class="field">
+          <label class="label">BIC</label>
+          <input id="cm-bic" type="text" placeholder="银行识别码（BIC/SWIFT）" />
+        </div>
+        <div class="field" style="grid-column:1 / span 2;">
+          <label class="label">Beneficiary name</label>
+          <input id="cm-beneficiary" type="text" placeholder="收款人名称" />
+        </div>
+      </div>
+      <div id="cm-form-actions" class="actions" style="justify-content:flex-end;margin-top:12px;gap:10px; display:none;">
+        <button class="btn" id="btn-common-cancel">关闭</button>
+        <button class="btn primary" id="btn-common-save">保存</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // 分页状态
+    let pageSize = 20; // 默认 20 / page
+    let currentPage = 1; // 从第1页开始
+    let invPageSize = 20;
+    let invCurrentPage = 1;
+
+    // 随机生成订单（10条）
+    function generateRandomOrders(count){
+      const platforms = ['Shopify','Amazon','eBay','Lazada','Shopee'];
+      const buyers = ['Alex Chen','Sophia Li','Michael Wong','Emily Zhang','Jason Lee','Ivy Lin','Daniel Liu','Nancy Zhao','William Sun','Cindy Gu'];
+      const countries = ['United States','United Kingdom','Germany','France','United Arab Emirates','Singapore','Hong Kong'];
+      const shops = ['mabangtesttest01','mabangtesttest02','mabangtesttest03','global-shop-01','global-shop-02'];
+      const currencies = ['HKD','USD','CNY','EUR'];
+      const list = [];
+      for(let i=0;i<count;i++){
+        const plat = platforms[Math.floor(Math.random()*platforms.length)];
+        const buyer = buyers[Math.floor(Math.random()*buyers.length)];
+        const country = countries[Math.floor(Math.random()*countries.length)];
+        const shop = shops[Math.floor(Math.random()*shops.length)];
+        const currency = currencies[Math.floor(Math.random()*currencies.length)];
+        const amount = Number((Math.random()*1800+50).toFixed(2));
+        const now = Date.now();
+        const ts = new Date(now - Math.floor(Math.random()*5*24*3600*1000));
+        const paidAt = ts.toISOString().replace('T',' ').substring(0,19);
+        const platformOrder = '#' + String(Math.floor(Math.random()*2000)+1000);
+        const orderId = String(Math.floor(Math.random()*1e14)).padStart(14,'0');
+        list.push({ platform:plat, platformOrder, orderId, buyer, country, shop, amount, currency, paidAt, shippedAt:'-', status:'none' });
+      }
+      return list;
+    }
+    let orders = generateRandomOrders(10);
+
+    // 常用信息库（随机生成5条示例）
+    function generateRandomCommonInfos(){
+      const sampleCompanies = [
+        'Oceanic Trading Ltd',
+        'Nova Global Holdings Inc.',
+        'Aurora Tech Pte. Ltd.',
+        'Blue Harbor Logistics GmbH',
+        'Vertex Digital FZ-LLC',
+        'Stellar Dynamics Pte. Ltd.',
+        'Quantum Solutions Ltd',
+        'Phoenix Enterprises Inc.'
+      ];
+      const sampleAddresses = [
+        'Room 1101, Central Plaza, Hong Kong',
+        'Business Bay, Dubai, UAE',
+        'Marina Bay Financial Centre, Singapore',
+        'Kurfuerstendamm 101, Berlin, Germany',
+        'IFC Tower, Central, Hong Kong'
+      ];
+      const contactPersons = ['Alex Chen','Sophia Li','Michael Wong','Emily Zhang','Jason Lee','Ivy Lin','Daniel Liu','Nancy Zhao'];
+      const phoneSeeds = ['+852','+65','+971','+1','+44'];
+      const emailDomains = ['@example.com','@corp.com','@business.com','@company.co','@mail.com'];
+      const currencies = ['HKD','USD','CNY','EUR'];
+      const bankNames = ['HSBC', 'Standard Chartered', 'DBS Bank', 'Citibank', 'Barclays'];
+      const bankAddresses = [
+        '1 Queen\'s Road Central, Hong Kong',
+        '6 Battery Road, Singapore',
+        '425 Lexington Ave, New York, USA',
+        '1 Churchill Place, London, UK',
+        'Sheikh Zayed Rd, Dubai, UAE'
+      ];
+      const list = [];
+      for(let i=0;i<5;i++){
+        const name = sampleCompanies[Math.floor(Math.random()*sampleCompanies.length)];
+        const addr = sampleAddresses[Math.floor(Math.random()*sampleAddresses.length)];
+        const cur = currencies[Math.floor(Math.random()*currencies.length)];
+        const bank = bankNames[Math.floor(Math.random()*bankNames.length)];
+        const bankAddr = bankAddresses[Math.floor(Math.random()*bankAddresses.length)];
+        const companyNumber = 'BRN-' + Math.random().toString(36).toUpperCase().slice(2,6) + '-' + String(Math.floor(Math.random()*10000)).padStart(4,'0');
+        const iban = 'IBAN' + String(Math.floor(Math.random()*1e12)).padStart(12,'0');
+        const bic = 'SWFT' + String(Math.floor(Math.random()*1e6)).padStart(6,'0');
+        const cp = contactPersons[Math.floor(Math.random()*contactPersons.length)];
+        const phone = phoneSeeds[Math.floor(Math.random()*phoneSeeds.length)] + ' ' + String(Math.floor(Math.random()*90000000)+10000000);
+        const emailUser = cp.toLowerCase().replace(/\s+/g,'.');
+        const email = emailUser + emailDomains[Math.floor(Math.random()*emailDomains.length)];
+        list.push({
+          id: 'N-' + String(i+1).padStart(3,'0'),
+          companyName: name,
+          companyNumber,
+          address: addr,
+          currency: cur,
+          contactPerson: cp,
+          contactNumber: phone,
+          email: email,
+          bankName: bank,
+          bankAddress: bankAddr,
+          iban,
+          bic,
+          beneficiary: name
+        });
+      }
+      return list;
+    }
+    let commonInfos = generateRandomCommonInfos();
+
+    let invoiceDB = [];
+    // 可选发票模版
+    const templates = [
+      { id:'TPL-MUXUE', name:'MUXUE发票模版', type:'MUXUE' },
+      { id:'TPL-HAOQIANYI', name:'Haoqianyi发票模版', type:'Haoqianyi' }
+    ];
+    let selectedTemplateId = '';
+
+    const qs = (s)=>document.querySelector(s);
+    const qsa = (s)=>Array.from(document.querySelectorAll(s));
+    const logEl = qs('#log');
+
+    function log(t){ if(!logEl) return; const ts=new Date().toISOString().replace('T',' ').substring(0,19); logEl.textContent += '['+ts+'] '+t+'\\n'; logEl.scrollTop=logEl.scrollHeight; }
+    function statusTag(s){ return s==='success' ? '<span class="status success">已开票</span>' : '<span class="status">未开票</span>'; }
+    // 将"可开票"界面里的订单状态随机设置为：已开票/未开票
+    function randomizeOrderStatuses(){
+      orders = orders.map(o => {
+        const isSuccess = Math.random() > 0.5;
+        return {
+          ...o,
+          status: isSuccess ? 'success' : 'none',
+          lastInvoice: isSuccess ? { no: 'AUTO-' + (Math.floor(Math.random()*9000)+1000), at: new Date().toISOString().replace('T',' ').substring(0,19) } : undefined
+        };
+      });
+    }
+
+    function getQuery(){
+      // 多条件读取（可同时满足多个）
+      const platformOrder = (qs('#pq-platformOrder')?.value || '').trim().toLowerCase();
+      const orderId = (qs('#pq-orderId')?.value || '').trim().toLowerCase();
+      const buyer = (qs('#pq-buyer')?.value || '').trim().toLowerCase();
+      const shop = (qs('#pq-shop')?.value || '').trim().toLowerCase();
+      const start = qs('#pq-start')?.value;
+      const end = qs('#pq-end')?.value;
+      const status = qs('#pq-status')?.value || '';
+      return { platformOrder, orderId, buyer, shop, start, end, status };
+    }
+
+    function matchValue(val, op, keywords){
+      if(keywords.length===0) return true;
+      const v = String(val ?? '').toLowerCase();
+      if(op==='eq') return keywords.some(k => v === String(k).toLowerCase());
+      return keywords.some(k => v.includes(String(k).toLowerCase()));
+    }
+
+    function renderOrders(){
+      const tbody = qs('#order-tbody');
+      const q = getQuery();
+      const filtered = orders.filter(o=>{
+        const byPlatformOrder = q.platformOrder ? String(o.platformOrder||'').toLowerCase().includes(q.platformOrder) : true;
+        const byOrderId = q.orderId ? String(o.orderId||'').toLowerCase().includes(q.orderId) : true;
+        const byBuyer = q.buyer ? String(o.buyer||'').toLowerCase().includes(q.buyer) : true;
+        const byShop = q.shop ? String(o.shop||'').toLowerCase().includes(q.shop) : true;
+        let byDate = true;
+        if(q.start || q.end){
+          const t = new Date((o.paidAt||'').replace(' ','T'));
+          if(q.start && t < new Date(q.start)) byDate = false;
+          if(q.end){
+            const endDate = new Date(q.end); endDate.setDate(endDate.getDate()+1);
+            if(t >= endDate) byDate = false;
+          }
+        }
+        const byStatus = q.status ? (o.status === q.status) : true;
+        return byPlatformOrder && byOrderId && byBuyer && byShop && byDate && byStatus;
+      });
+      // 按付款时间倒序（最新在前）
+      filtered.sort((a,b)=>{
+        const ta = new Date(String(a.paidAt||'').replace(' ','T')).getTime() || 0;
+        const tb = new Date(String(b.paidAt||'').replace(' ','T')).getTime() || 0;
+        return tb - ta;
+      });
+      // 分页切片
+      const total = filtered.length;
+      const totalPages = Math.max(1, Math.ceil(total / pageSize));
+      if(currentPage > totalPages) currentPage = totalPages;
+      const startIdx = (currentPage - 1) * pageSize;
+      const pageItems = filtered.slice(startIdx, startIdx + pageSize);
+
+      tbody.innerHTML = pageItems.map(o=>`
+        <tr data-id="${o.orderId}">
+          <td><input type="checkbox" class="chk-row" /></td>
+          <td>${o.buyer}</td>
+          <td>${o.shop}</td>
+          <td>${o.platformOrder}</td>
+          <td>${o.orderId}</td>
+          <td>${o.country}</td>
+          <td>${o.currency} ${o.amount.toLocaleString()}</td>
+          <td>${o.paidAt}</td>
+          <td>${statusTag(o.status)}</td>
+        </tr>
+      `).join('');
+      updateSelCount();
+      renderOrderPager(total, totalPages);
+    }
+
+    function renderOrderPager(total, totalPages){
+      const wrap = qs('#order-pager'); if(!wrap) return;
+      const visibleNums = [];
+      const maxNums = 5;
+      const start = Math.max(1, currentPage - 2);
+      const end = Math.min(totalPages, start + maxNums - 1);
+      for(let i=start;i<=end;i++) visibleNums.push(i);
+
+      const sizeOptions = [10,20,50,100,800];
+
+      wrap.innerHTML = `
+        <div class="pg">
+          <span class="total">共 ${total} 条</span>
+          <button class="btn" data-pg="prev" ${currentPage===1?'disabled':''}><</button>
+          ${visibleNums.map(n=>`<div class="num ${n===currentPage?'active':''}" data-pg="num" data-no="${n}">${n}</div>`).join('')}
+          <button class="btn" data-pg="next" ${currentPage===totalPages?'disabled':''}>></button>
+          <div class="pp">
+            <select class="pp-select" id="pg-size">
+              ${sizeOptions.map(s=>`<option value="${s}" ${s===pageSize?'selected':''}>${s} / page</option>`).join('')}
+            </select>
+          </div>
+          <div class="goto">
+            <span class="legend">Go to</span>
+            <input id="pg-input" type="number" min="1" max="${totalPages}" value="${currentPage}" />
+          </div>
+        </div>
+      `;
+
+      // 绑定分页事件
+      wrap.querySelectorAll('[data-pg="num"]').forEach(el=>{
+        el.addEventListener('click', ()=>{ currentPage = Number(el.getAttribute('data-no')); renderOrders(); });
+      });
+      const prev = wrap.querySelector('[data-pg="prev"]');
+      const next = wrap.querySelector('[data-pg="next"]');
+      if(prev) prev.addEventListener('click', ()=>{ if(currentPage>1){ currentPage--; renderOrders(); }});
+      if(next) next.addEventListener('click', ()=>{ if(currentPage<totalPages){ currentPage++; renderOrders(); }});
+      const sizeSel = wrap.querySelector('#pg-size');
+      if(sizeSel) sizeSel.addEventListener('change', ()=>{ pageSize = Number(sizeSel.value); currentPage = 1; renderOrders(); });
+      const pgInput = wrap.querySelector('#pg-input');
+      if(pgInput) pgInput.addEventListener('change', ()=>{
+        let val = Number(pgInput.value||1); if(isNaN(val)) val = 1;
+        val = Math.max(1, Math.min(totalPages, val));
+        currentPage = val; renderOrders();
+      });
+    }
+
+    function toUSD(amount, currency){
+      const rates = { 'USD': 1, 'HK$': 0.128, 'CNY': 0.137, 'EUR': 1.07 };
+      const rate = rates[currency] ?? 1;
+      return Number(amount || 0) * rate;
+    }
+
+    // 编码工具
+    const pad = (n, w) => String(n).padStart(w, '0');
+    const rand = (min, max) => Math.floor(Math.random()*(max-min+1))+min;
+    function makeInvoiceNo(customerCode, date){
+      const d = date ? new Date(date) : new Date();
+      const ymd = d.getFullYear() + pad(d.getMonth()+1,2) + pad(d.getDate(),2); // YYYYMMDD
+      const rnd4 = pad(rand(0,9999),4);
+      return `${pad(customerCode,5)}${ymd}${rnd4}`;
+    }
+
+    function renderInvoiceSummary(){
+      const tbody = qs('#invoice-tbody');
+      // 将 invoiceDB 中成功记录按发票号聚合
+      const map = new Map();
+      invoiceDB.filter(r=>r.status==='success').forEach(r=>{
+        if(!map.has(r.invoiceNo)){
+          map.set(r.invoiceNo, { invoiceNo:r.invoiceNo, companyName:r.companyName, date:r.date, at:r.at, salesRep:r.salesRep||'-', orders:[] });
+        }
+        map.get(r.invoiceNo).orders.push(r.orderId);
+      });
+
+      // 如果没有真实数据，生成10条随机"已开票"发票汇总
+      function generateRandomInvoiceGroups(count){
+        const companies = ['Oceanic Trading Ltd','Nova Global Holdings Inc.','Aurora Tech Pte. Ltd.','Blue Harbor Logistics GmbH','Vertex Digital FZ-LLC','Stellar Dynamics Pte. Ltd.','Quantum Solutions Ltd','Phoenix Enterprises Inc.'];
+        const salesPool = ['张伟','王芳','李娜','刘强','陈晨','赵敏','孙涛','周丽'];
+        const groups = [];
+        for(let i=0;i<count;i++){
+          const customerCode = rand(10000, 99999);
+          const invNo = makeInvoiceNo(customerCode);
+          const company = companies[Math.floor(Math.random()*companies.length)];
+          const salesRep = salesPool[Math.floor(Math.random()*salesPool.length)];
+          const orderCount = Math.floor(Math.random()*5)+1; // 1-5
+          const orders = Array.from({length: orderCount}, ()=> String(Math.floor(Math.random()*1e14)).padStart(14,'0'));
+          const at = new Date(Date.now()-Math.floor(Math.random()*5*86400000)).toISOString().replace('T',' ').substring(0,19);
+          const totalUSD = Math.random()*2500 + 100; // 100-2600
+          // 随机状态：processing/success/failed（比例大致 2/5/3）
+          const r = Math.random();
+          const status = r < 0.2 ? 'processing' : (r < 0.7 ? 'success' : 'failed');
+          groups.push({ invoiceNo:invNo, companyName:company, at, salesRep, orders, totalUSD, status });
+        }
+        return groups;
+      }
+
+      // 多条件读取
+      const qInv = (qs('#iq-invoiceNo')?.value || '').trim().toLowerCase();
+      const qCom = (qs('#iq-company')?.value || '').trim().toLowerCase();
+      const qSales = (qs('#iq-salesRep')?.value || '').trim().toLowerCase();
+
+      function invMatch(group){
+        const byInv = qInv ? String(group.invoiceNo||'').toLowerCase().includes(qInv) : true;
+        const byCom = qCom ? String(group.companyName||'').toLowerCase().includes(qCom) : true;
+        const bySales = qSales ? String(group.salesRep||'').toLowerCase().includes(qSales) : true;
+        return byInv && byCom && bySales;
+      }
+
+      // 生成时间范围过滤
+      const start = qs('#iq-start')?.value;
+      const end = qs('#iq-end')?.value;
+      function withinRange(group){
+        if(!start && !end) return true;
+        const t = new Date(group.at.replace(' ','T')); // group.at: YYYY-MM-DD HH:mm:ss
+        if(start && t < new Date(start)) return false;
+        if(end) {
+          const endDate = new Date(end);
+          endDate.setDate(endDate.getDate()+1); // 包含当天
+          if(t >= endDate) return false;
+        }
+        return true;
+      }
+
+      let baseGroups = Array.from(map.values());
+      if(baseGroups.length===0){
+        baseGroups = generateRandomInvoiceGroups(10);
+      } else if (baseGroups.length < 10) {
+        // 真实数据不足10条时，补充随机数据至10条
+        const need = 10 - baseGroups.length;
+        const extra = generateRandomInvoiceGroups(need);
+        baseGroups = baseGroups.concat(extra);
+      }
+      // 读取状态筛选
+      const statusSel = document.getElementById('iq-status');
+      const wantStatus = statusSel ? statusSel.value : '';
+      let allGroups = baseGroups.filter(invMatch).filter(withinRange).filter(g=>{
+        if(!wantStatus) return true;
+        return (g.status || 'success') === wantStatus;
+      });
+      // 按生成/提交时间倒序（最新在前）
+      allGroups.sort((a,b)=>{
+        const ta = new Date(String(a.at||'').replace(' ','T')).getTime() || 0;
+        const tb = new Date(String(b.at||'').replace(' ','T')).getTime() || 0;
+        return tb - ta;
+      });
+      const invTotal = allGroups.length;
+      const invTotalPages = Math.max(1, Math.ceil(invTotal / invPageSize));
+      if(invCurrentPage > invTotalPages) invCurrentPage = invTotalPages;
+      const invStart = (invCurrentPage - 1) * invPageSize;
+      const pageGroups = allGroups.slice(invStart, invStart + invPageSize);
+
+      const rows = pageGroups.map(group=>{
+        // 依据订单ID汇总金额（按币种分组）
+        const involved = orders.filter(o=>group.orders.includes(o.orderId));
+        let totalUSDCalc = involved.reduce((sum,o)=> {
+          const base = Number(o.amount||0);
+          return sum + toUSD(base, o.currency);
+        }, 0);
+        if(involved.length===0 && typeof group.totalUSD === 'number'){
+          totalUSDCalc = group.totalUSD;
+        }
+        const totalText = '$ ' + totalUSDCalc.toLocaleString(undefined,{minimumFractionDigits:2, maximumFractionDigits:2});
+        // 状态与操作
+        const st = group.status || 'success';
+        const stText = st==='processing'?'处理中':(st==='failed'?'失败':'已完成');
+        const stTag = `<span class="status ${st==='processing'?'processing':(st==='failed'?'failed':'success')}">${stText}</span>`;
+        let opHtml = '';
+        if(st==='success') opHtml = `<button class="btn" data-act="download-invoice">下载</button>`;
+        if(st==='failed') opHtml = `<button class="btn" data-act="view-reason">查看原因</button>`;
+        return `
+          <tr data-inv="${group.invoiceNo}">
+            <td>${group.invoiceNo}</td>
+            <td>${group.companyName}</td>
+            <td>${group.salesRep}</td>
+            <td>${group.orders.length}</td>
+            <td>${totalText || '-'}</td>
+            <td>${group.at}</td>
+            <td>${stTag}</td>
+            <td>${opHtml}</td>
+          </tr>
+        `;
+      }).join('');
+
+      tbody.innerHTML = rows || '<tr><td colspan="7" class="legend">暂无数据</td></tr>';
+      renderInvoicePager(invTotal, invTotalPages);
+    }
+
+    function renderInvoicePager(total, totalPages){
+      const wrap = qs('#invoice-pager'); if(!wrap) return;
+      const visible = [];
+      const maxNums = 5;
+      const start = Math.max(1, invCurrentPage - 2);
+      const end = Math.min(totalPages, start + maxNums - 1);
+      for(let i=start;i<=end;i++) visible.push(i);
+      const sizeOptions = [10,20,50,100,800];
+      wrap.innerHTML = `
+        <div class="pg">
+          <span class="total">共 ${total} 条</span>
+          <button class="btn" data-ipg="prev" ${invCurrentPage===1?'disabled':''}><</button>
+          ${visible.map(n=>`<div class="num ${n===invCurrentPage?'active':''}" data-ipg="num" data-no="${n}">${n}</div>`).join('')}
+          <button class="btn" data-ipg="next" ${invCurrentPage===totalPages?'disabled':''}>></button>
+          <div class="pp">
+            <select class="pp-select" id="ipg-size">
+              ${sizeOptions.map(s=>`<option value="${s}" ${s===invPageSize?'selected':''}>${s} / page</option>`).join('')}
+            </select>
+          </div>
+          <div class="goto">
+            <span class="legend">Go to</span>
+            <input id="ipg-input" type="number" min="1" max="${totalPages}" value="${invCurrentPage}" />
+          </div>
+        </div>
+      `;
+      wrap.querySelectorAll('[data-ipg="num"]').forEach(el=>{
+        el.addEventListener('click', ()=>{ invCurrentPage = Number(el.getAttribute('data-no')); renderInvoiceSummary(); });
+      });
+      const prev = wrap.querySelector('[data-ipg="prev"]');
+      const next = wrap.querySelector('[data-ipg="next"]');
+      if(prev) prev.addEventListener('click', ()=>{ if(invCurrentPage>1){ invCurrentPage--; renderInvoiceSummary(); }});
+      if(next) next.addEventListener('click', ()=>{ if(invCurrentPage<totalPages){ invCurrentPage++; renderInvoiceSummary(); }});
+      const sizeSel = wrap.querySelector('#ipg-size');
+      if(sizeSel) sizeSel.addEventListener('change', ()=>{ invPageSize = Number(sizeSel.value); invCurrentPage = 1; renderInvoiceSummary(); });
+      const ipgInput = wrap.querySelector('#ipg-input');
+      if(ipgInput) ipgInput.addEventListener('change', ()=>{
+        let val = Number(ipgInput.value||1); if(isNaN(val)) val = 1;
+        val = Math.max(1, Math.min(totalPages, val));
+        invCurrentPage = val; renderInvoiceSummary();
+      });
+    }
+
+    // 生成5条随机的已开票发票汇总（海外公司英文名），并与现有订单绑定
+    function seedInitialInvoices(){
+      if (invoiceDB.length > 0) return; // 已有记录则不重复生成
+      const companies = [
+        'Oceanic Trading Ltd',
+        'Nova Global Holdings Inc.',
+        'Aurora Tech Pte. Ltd.',
+        'Blue Harbor Logistics GmbH',
+        'Vertex Digital FZ-LLC'
+      ];
+      const salesPool = ['张伟', '王芳', '李娜', '刘强', '陈晨'];
+      const now = new Date();
+      let startIdx = 0;
+      for (let i = 0; i < 5; i++) {
+        const customerCode = rand(10000, 99999);
+        const invNo = makeInvoiceNo(customerCode);
+        const d = new Date(now.getTime() - (i*86400000));
+        const dateStr = d.toISOString().substring(0,10);
+        const atStr = d.toISOString().replace('T',' ').substring(0,19);
+        const company = companies[i % companies.length];
+        const salesRep = salesPool[i % salesPool.length];
+        const count = Math.max(1, Math.min(5, Math.floor(Math.random()*5)+1)); // 1-5
+        for (let j = 0; j < count; j++) {
+          const o = orders[(startIdx + j) % orders.length];
+          invoiceDB.push({
+            orderId: o.orderId,
+            invoiceNo: invNo,
+            companyName: company,
+            date: dateStr,
+            currency: 'USD',
+            at: atStr,
+            salesRep,
+            status: 'success'
+          });
+        }
+        startIdx += count;
+      }
+    }
+    function updateSelCount(){ qs('#sel-count').textContent = qsa('.chk-row:checked').length; }
+    function getSelectedIds(){ return qsa('#order-tbody tr').filter(tr=>tr.querySelector('.chk-row').checked).map(tr=>tr.getAttribute('data-id')); }
+
+    // 常用信息渲染与载入
+    function renderCommonSelect(){
+      const sel = qs('#f-common-list');
+      sel.innerHTML = '<option value="">选择常用信息</option>' + commonInfos.map(c=>`<option value="${c.id}">${c.companyName}</option>`).join('');
+    }
+    function renderCommonTable(){
+      const tb = qs('#common-tbody');
+      if(!tb) return;
+      tb.innerHTML = commonInfos.map(c=>`
+        <tr>
+          <td>${c.companyName}</td>
+          <td>${c.companyNumber}</td>
+          <td>${c.address}</td>
+          <td>${c.currency}</td>
+          <td>
+            <button class="btn" data-cm-act="edit" data-id="${c.id}">编辑</button>
+            <button class="btn" data-cm-act="del" data-id="${c.id}">删除</button>
+          </td>
+        </tr>
+      `).join('');
+    }
+    function loadCommonToForm(id){
+      const c = commonInfos.find(x=>x.id===id); if(!c) return;
+      qs('#f-company-name').value = c.companyName || '';
+      qs('#f-company-number').value = c.companyNumber || '';
+      qs('#f-address').value = c.address || '';
+      qs('#f-currency').value = c.currency || 'HK$';
+      // 同步银行信息到编辑表单（如无则置空）
+      if(qs('#f-bank-name')) qs('#f-bank-name').value = c.bankName || '';
+      if(qs('#f-bank-address')) qs('#f-bank-address').value = c.bankAddress || '';
+      if(qs('#f-iban')) qs('#f-iban').value = c.iban || '';
+      if(qs('#f-bic')) qs('#f-bic').value = c.bic || '';
+      if(qs('#f-beneficiary')) qs('#f-beneficiary').value = c.beneficiary || '';
+      refreshAmountPreview();
+      log('已载入常用信息：'+ c.companyName);
+    }
+    function saveCurrentToCommon(){
+      const obj = {
+        id: 'N-' + String(commonInfos.length+1).padStart(3,'0'),
+        companyName: qs('#f-company-name').value.trim(),
+        companyNumber: qs('#f-company-number').value.trim(),
+        address: qs('#f-address').value.trim(),
+        currency: qs('#f-currency').value,
+        // 联系方式（可选）
+        contactPerson: qs('#f-contact-person')?.value.trim() || '',
+        contactNumber: qs('#f-contact-number')?.value.trim() || '',
+        email: qs('#f-email')?.value.trim() || '',
+        // 银行信息（来自编辑开票信息表单）
+        bankName: qs('#f-bank-name')?.value.trim() || '',
+        bankAddress: qs('#f-bank-address')?.value.trim() || '',
+        iban: qs('#f-iban')?.value.trim() || '',
+        bic: qs('#f-bic')?.value.trim() || '',
+        beneficiary: qs('#f-beneficiary')?.value.trim() || ''
+        // 注意：不保存 Amount (f-amount-override) 和 Date (f-date) 字段
+      };
+      if(!obj.companyName || !obj.companyNumber){ alert('请至少填写 Company Name 与 Company Number'); return; }
+      const dup = commonInfos.find(c=>c.companyName===obj.companyName && c.companyNumber===obj.companyNumber);
+      if(!dup){ 
+        commonInfos.push(obj); 
+        renderCommonSelect(); 
+        log('已保存为常用信息：'+obj.companyName+'（不包含 Amount、Date）'); 
+      } else {
+        log('该公司信息已存在于常用信息库中');
+      }
+    }
+
+    // 表单逻辑
+    let selectedOrdersCache = [];
+    let currentCurrency = 'HKD';
+    
+    // 打开模版选择
+    function openTemplateSelect(selectedIds){
+      selectedOrdersCache = selectedIds.map(id=>orders.find(o=>o.orderId===id)).filter(Boolean);
+      // 渲染模版下拉
+      const sel = qs('#tpl-select');
+      sel.innerHTML = '<option value="">请选择发票模版</option>' + templates.map(t=>`<option value="${t.id}">${t.name}</option>`).join('');
+      selectedTemplateId = '';
+      qs('#tpl-backdrop').style.display='flex';
+    }
+    function closeTemplateSelect(){ qs('#tpl-backdrop').style.display='none'; }
+
+    function openFormPrefill(selectedIds){
+      selectedOrdersCache = selectedIds.map(id=>orders.find(o=>o.orderId===id)).filter(Boolean);
+      const first = selectedOrdersCache[0];
+      currentCurrency = first?.currency || 'HKD';
+      qs('#f-company-name').value = first?.shop || '';
+      qs('#f-company-number').value = '';
+      qs('#f-address').value = first?.country ? (first.country + ' / (填写详细地址)') : '';
+      qs('#f-contact-person').value = '';
+      qs('#f-contact-number').value = '';
+      qs('#f-email').value = '';
+        qs('#f-bank-name').value = '';
+        qs('#f-bank-address').value = '';
+        qs('#f-iban').value = '';
+        qs('#f-bic').value = '';
+        qs('#f-beneficiary').value = '';
+      // 已移除手填发票号，发票号将按规则自动生成
+      qs('#f-date').valueAsDate = new Date();
+      qs('#f-currency').value = currentCurrency;
+      renderCommonSelect();
+      refreshAmountPreview();
+      qs('#form-backdrop').style.display='flex';
+    }
+    function closeForm(){ qs('#form-backdrop').style.display='none'; }
+    function openConfirm(){ qs('#confirm-backdrop').style.display='flex'; }
+    function closeConfirm(){ qs('#confirm-backdrop').style.display='none'; }
+
+    function refreshAmountPreview(){
+      const sum = selectedOrdersCache.reduce((a,b)=>a + Number(b.amount||0), 0);
+      const override = Number(qs('#f-amount-override')?.value || 0);
+      const final = override > 0 ? override : sum;
+      // 在输入框中回显当前履约价格（可编辑）
+      qs('#f-amount-override').value = final.toFixed(2);
+    }
+
+    function bindEvents(){
+      qs('#chk-all').addEventListener('change', e=>{ const on=e.target.checked; qsa('.chk-row').forEach(ch=>ch.checked=on); updateSelCount(); });
+      document.addEventListener('change', e=>{ if(e.target.classList.contains('chk-row')) updateSelCount(); });
+      qs('#btn-clear').addEventListener('click', ()=>{ qsa('.chk-row').forEach(ch=>ch.checked=false); qs('#chk-all').checked=false; updateSelCount(); });
+      // 删除"从订单管理同步"按钮后的事件绑定（已去除）
+
+      // 搜索与重置
+      if(qs('#btn-q-search')){
+        qs('#btn-q-search').addEventListener('click', ()=>{ renderOrders(); log('已执行搜索筛选'); });
+      }
+      // 已开票检索
+      if(qs('#btn-iq-search')){
+        qs('#btn-iq-search').addEventListener('click', ()=>{ renderInvoiceSummary(); });
+      }
+      if(qs('#btn-iq-reset')){
+        qs('#btn-iq-reset').addEventListener('click', ()=>{
+          if(qs('#iq-invoiceNo')) qs('#iq-invoiceNo').value = '';
+          if(qs('#iq-company')) qs('#iq-company').value = '';
+          if(qs('#iq-salesRep')) qs('#iq-salesRep').value = '';
+          if(qs('#iq-start')) qs('#iq-start').value = '';
+          if(qs('#iq-end')) qs('#iq-end').value = '';
+          renderInvoiceSummary();
+        });
+      }
+      // 提交结果通知弹窗
+      const nClose = qs('#btn-notice-close'); if(nClose){ nClose.addEventListener('click', ()=>{ qs('#notice-backdrop').style.display='none'; }); }
+      const nGoto = qs('#btn-notice-goto'); if(nGoto){ nGoto.addEventListener('click', ()=>{ 
+        qs('#notice-backdrop').style.display='none';
+        // 切换到已开票标签页
+        const tabBtns = qsa('.tab');
+        const target = Array.from(tabBtns).find(t=>t.getAttribute('data-tab')==='invoiced');
+        if(target){ 
+          target.click(); 
+          // 强制刷新已开票数据
+          setTimeout(()=>{
+            renderInvoiceSummary();
+            log('已切换到已开票界面并刷新数据');
+          }, 100);
+        }
+      }); }
+      // 常用信息库管理入口
+      const btnMng = qs('#btn-manage-common');
+      if(btnMng){
+        btnMng.addEventListener('click', ()=>{ 
+          renderCommonTable(); 
+          qs('#common-backdrop').style.display='flex';
+          // 打开时仅展示列表，隐藏表单
+          const form = qs('#cm-form'); if(form) form.style.display='none';
+          const formActions = qs('#cm-form-actions'); if(formActions) formActions.style.display='none';
+        });
+      }
+      const cmCancel = qs('#btn-common-cancel'); if(cmCancel){ cmCancel.addEventListener('click', ()=>{ qs('#common-backdrop').style.display='none'; }); }
+      const cmAdd = qs('#btn-common-add');
+      if(cmAdd){
+        cmAdd.addEventListener('click', ()=>{
+          // 显示编辑表单
+          const form = qs('#cm-form'); if(form) form.style.display='grid';
+          const formActions = qs('#cm-form-actions'); if(formActions) formActions.style.display='flex';
+          qs('#cm-name').value='';
+          qs('#cm-number').value='';
+          qs('#cm-address').value='';
+          qs('#cm-contact-person').value='';
+          qs('#cm-contact-number').value='';
+          qs('#cm-email').value='';
+          qs('#cm-currency').value='HK$';
+          qs('#cm-bank-name').value='';
+          qs('#cm-bank-address').value='';
+          qs('#cm-iban').value='';
+          qs('#cm-bic').value='';
+          qs('#cm-beneficiary').value='';
+        });
+      }
+      const cmSave = qs('#btn-common-save');
+      if(cmSave){
+        cmSave.addEventListener('click', ()=>{
+          const obj = {
+            id: 'N-' + String(commonInfos.length+1).padStart(3,'0'),
+            companyName: qs('#cm-name').value.trim(),
+            companyNumber: qs('#cm-number').value.trim(),
+            address: qs('#cm-address').value.trim(),
+            contactPerson: qs('#cm-contact-person')?.value.trim() || '',
+            contactNumber: qs('#cm-contact-number')?.value.trim() || '',
+            email: qs('#cm-email')?.value.trim() || '',
+            currency: qs('#cm-currency').value,
+            bankName: qs('#cm-bank-name')?.value.trim() || '',
+            bankAddress: qs('#cm-bank-address')?.value.trim() || '',
+            iban: qs('#cm-iban')?.value.trim() || '',
+            bic: qs('#cm-bic')?.value.trim() || '',
+            beneficiary: qs('#cm-beneficiary')?.value.trim() || ''
+          };
+          if(!obj.companyName || !obj.companyNumber){ alert('请填写公司名称与编号'); return; }
+          const exist = commonInfos.find(c=>c.companyName===obj.companyName && c.companyNumber===obj.companyNumber);
+          if(!exist){ commonInfos.push(obj); }
+          renderCommonTable(); renderCommonSelect();
+          alert('已保存到常用信息');
+        });
+      }
+      // 表格编辑/删除
+      document.addEventListener('click', (e)=>{
+        const btn = e.target.closest('button'); if(!btn) return;
+        if(btn.getAttribute('data-cm-act')==='edit'){
+          // 显示编辑表单
+          const form = qs('#cm-form'); if(form) form.style.display='grid';
+          const formActions = qs('#cm-form-actions'); if(formActions) formActions.style.display='flex';
+          const id = btn.getAttribute('data-id');
+          const c = commonInfos.find(x=>x.id===id); if(!c) return;
+          qs('#cm-name').value = c.companyName;
+          qs('#cm-number').value = c.companyNumber;
+          qs('#cm-address').value = c.address;
+          qs('#cm-contact-person').value = c.contactPerson || '';
+          qs('#cm-contact-number').value = c.contactNumber || '';
+          qs('#cm-email').value = c.email || '';
+          qs('#cm-currency').value = c.currency;
+          qs('#cm-bank-name').value = c.bankName || '';
+          qs('#cm-bank-address').value = c.bankAddress || '';
+          qs('#cm-iban').value = c.iban || '';
+          qs('#cm-bic').value = c.bic || '';
+          qs('#cm-beneficiary').value = c.beneficiary || '';
+        } else if(btn.getAttribute('data-cm-act')==='del'){
+          const id = btn.getAttribute('data-id');
+          if(confirm('确定删除该常用信息吗？')){
+            commonInfos = commonInfos.filter(x=>x.id!==id);
+            renderCommonTable(); renderCommonSelect();
+          }
+        }
+      });
+      if(qs('#btn-q-reset')){
+        qs('#btn-q-reset').addEventListener('click', ()=>{
+          if(qs('#pq-platformOrder')) qs('#pq-platformOrder').value = '';
+          if(qs('#pq-orderId')) qs('#pq-orderId').value = '';
+          if(qs('#pq-buyer')) qs('#pq-buyer').value = '';
+          if(qs('#pq-shop')) qs('#pq-shop').value = '';
+          if(qs('#pq-start')) qs('#pq-start').value = '';
+          if(qs('#pq-end')) qs('#pq-end').value = '';
+          renderOrders();
+        });
+      }
+
+      document.addEventListener('click', (e)=>{
+        const btn = e.target.closest('button'); if(!btn) return;
+        if(btn.getAttribute('data-act')==='edit'){
+          const id = btn.closest('tr').getAttribute('data-id');
+          openFormPrefill([id]); log('单笔开票：'+id);
+        } else if(btn.getAttribute('data-act')==='download-invoice'){
+          const inv = btn.closest('tr').getAttribute('data-inv');
+          triggerDownloadByInvoice(inv);
+        } else if(btn.getAttribute('data-act')==='view-reason'){
+          const inv = btn.closest('tr').getAttribute('data-inv');
+          const reasons = ['模板渲染失败','接口超时','金额校验失败','文件生成异常'];
+          const r = reasons[Math.floor(Math.random()*reasons.length)];
+          alert('发票 '+inv+' 失败原因：'+r);
+        }
+        const tabBtn = e.target.closest('.tab');
+        if(tabBtn){
+          qsa('.tab').forEach(t=>t.classList.remove('active'));
+          tabBtn.classList.add('active');
+          const which = tabBtn.getAttribute('data-tab');
+          if(which==='pending'){
+            qs('#tab-pending').classList.remove('hidden');
+            qs('#tab-invoiced').classList.add('hidden');
+          } else {
+            qs('#tab-pending').classList.add('hidden');
+            qs('#tab-invoiced').classList.remove('hidden');
+            renderInvoiceSummary();
+          }
+        }
+      });
+
+      qs('#btn-validate').addEventListener('click', ()=>{
+        const ids = getSelectedIds();
+        if(ids.length===0){ alert('请先选择订单'); return; }
+        const hasInvoiced = ids.some(id => (orders.find(o=>o.orderId===id)?.status)==='success');
+        if(hasInvoiced){ openConfirm(); log('存在已开票订单，弹出确认'); } else { openTemplateSelect(ids); }
+      });
+      qs('#btn-cancel-confirm').addEventListener('click', ()=>{ closeConfirm(); log('取消开票'); });
+      qs('#btn-continue-confirm').addEventListener('click', ()=>{ closeConfirm(); openTemplateSelect(getSelectedIds()); });
+      // 模版选择交互
+      qs('#btn-cancel-tpl').addEventListener('click', ()=>{ closeTemplateSelect(); });
+      qs('#btn-next-tpl').addEventListener('click', ()=>{
+        const val = qs('#tpl-select').value;
+        if(!val){ alert('请选择发票模版'); return; }
+        selectedTemplateId = val;
+        closeTemplateSelect();
+        // 进入表单编辑
+        openFormPrefill(selectedOrdersCache.map(o=>o.orderId));
+      });
+
+      // 常用信息交互
+      qs('#btn-load-common').addEventListener('click', ()=>{ const id=qs('#f-common-list').value; if(id) loadCommonToForm(id); });
+
+      // 表单交互
+      qs('#f-currency').addEventListener('change', refreshAmountPreview);
+      qs('#btn-close-form').addEventListener('click', closeForm);
+
+      qs('#btn-submit-form').addEventListener('click', ()=>{
+        const data = {
+          companyName: qs('#f-company-name').value.trim(),
+          companyNumber: qs('#f-company-number').value.trim(),
+          address: qs('#f-address').value.trim(),
+          contactPerson: qs('#f-contact-person').value.trim(),
+          contactNumber: qs('#f-contact-number').value.trim(),
+          email: qs('#f-email').value.trim(),
+          bankName: qs('#f-bank-name').value.trim(),
+          bankAddress: qs('#f-bank-address').value.trim(),
+          iban: qs('#f-iban').value.trim(),
+          bic: qs('#f-bic').value.trim(),
+          beneficiary: qs('#f-beneficiary').value.trim(),
+          date: qs('#f-date').value,
+          currency: qs('#f-currency').value,
+          amountOverride: Number(qs('#f-amount-override').value||0)
+        };
+        if(!data.companyName || !data.companyNumber || !data.address || !data.date){
+          alert('请完整填写表单信息'); return;
+        }
+        closeForm();
+        
+        // 检查是否勾选保存到常用信息库
+        const saveToCommon = qs('#chk-save-common')?.checked;
+        if(saveToCommon){
+          saveCurrentToCommon();
+        }
+        
+        // 重置订单状态为未开票
+        const ids = selectedOrdersCache.map(o=>o.orderId);
+        orders = orders.map(o => ids.includes(o.orderId) ? { ...o, status:'none' } : o);
+        renderOrders();
+        log('执行开票中...');
+
+        setTimeout(()=>{
+          ids.forEach(id=>{
+            const success = Math.random()>0.05;
+            // 发票号按规则自动生成（客户编号取公司号数字部分前5位，不足随机补齐）
+            const digits = (data.companyNumber || '').replace(/\D/g,'');
+            const customerCode = digits ? Number(digits.slice(0,5).padEnd(5,'0')) : rand(10000,99999);
+            const invNo = makeInvoiceNo(customerCode, data.date);
+            const now = new Date().toISOString().replace('T',' ').substring(0,19);
+            // 记录覆盖后的履约价格（以 USD 汇总时仍按原逻辑转换）
+            invoiceDB.push({ orderId:id, invoiceNo:invNo, companyName:data.companyName, date:data.date, currency:data.currency, at:now, status:success?'success':'fail', overrideAmount:data.amountOverride>0?data.amountOverride:undefined });
+            const idx = orders.findIndex(o=>o.orderId===id);
+            if(idx>=0){
+              const overridden = data.amountOverride>0 ? data.amountOverride : orders[idx].amount;
+              orders[idx] = { ...orders[idx], amount: overridden, status: success?'success':'none', lastInvoice: success?{no:invNo, at:now}:orders[idx].lastInvoice };
+            }
+            log((success?'成功':'失败')+'：订单 '+id+' 发票 '+invNo);
+          });
+          renderOrders();
+          renderInvoiceSummary();
+          
+          // 显示成功通知弹窗
+          const nb = qs('#notice-backdrop'); 
+          if(nb){ 
+            nb.style.display='flex'; 
+          }
+        }, 900);
+      });
+    }
+
+    function triggerDownload(orderId){
+      // 找到该订单的最新成功发票
+      const rec = [...invoiceDB].reverse().find(x => x.orderId===orderId && x.status==='success');
+      if(!rec){ alert('暂无可下载的发票'); return; }
+
+      // 识别是否为同一张发票（同一 invoiceNo 的多订单）
+      const sameInvoiceRecords = invoiceDB.filter(x => x.invoiceNo===rec.invoiceNo && x.status==='success');
+      const orderIds = sameInvoiceRecords.map(r=>r.orderId);
+      const involvedOrders = orders.filter(o => orderIds.includes(o.orderId));
+
+      // 汇总金额（按币种单独汇总，避免混币种）
+      const totalsByCurrency = involvedOrders.reduce((acc, o) => {
+        const cur = o.currency || rec.currency || '';
+        acc[cur] = (acc[cur] || 0) + Number(o.amount||0);
+        return acc;
+      }, {});
+
+      const header = [
+        `Invoice No: ${rec.invoiceNo}`,
+        `Company: ${rec.companyName}`,
+        `Date: ${rec.date}`,
+        `Generated At: ${rec.at}`,
+        `Orders Count: ${involvedOrders.length}`,
+        `Totals: ` + Object.keys(totalsByCurrency).map(c=>`${c} ${totalsByCurrency[c].toLocaleString()}`).join(' | '),
+        `----------------------------------------`,
+        `Items:`
+      ].join('\n');
+
+      const lines = involvedOrders.map(o => `- Order ${o.orderId} | ${o.shop} | ${o.currency} ${o.amount.toLocaleString()} | Buyer: ${o.buyer}`);
+      const content = header + '\n' + lines.join('\n');
+
+      const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${rec.invoiceNo}.txt`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    }
+
+    function triggerDownloadByInvoice(invoiceNo){
+      const recAny = [...invoiceDB].reverse().find(x => x.invoiceNo===invoiceNo && x.status==='success');
+      if(!recAny){ alert('暂无可下载的发票'); return; }
+      const same = invoiceDB.filter(x => x.invoiceNo===invoiceNo && x.status==='success');
+      const orderIds = same.map(r=>r.orderId);
+      const involvedOrders = orders.filter(o => orderIds.includes(o.orderId));
+      const totalsByCurrency = involvedOrders.reduce((acc, o) => {
+        const cur = o.currency || recAny.currency || '';
+        acc[cur] = (acc[cur] || 0) + Number(o.amount||0);
+        return acc;
+      }, {});
+      const header = [
+        `Invoice No: ${invoiceNo}`,
+        `Company: ${recAny.companyName}`,
+        `Date: ${recAny.date}`,
+        `Generated At: ${recAny.at}`,
+        `Orders Count: ${involvedOrders.length}`,
+        `Totals: ` + Object.keys(totalsByCurrency).map(c=>`${c} ${totalsByCurrency[c].toLocaleString()}`).join(' | '),
+        `----------------------------------------`,
+        `Items:`
+      ].join('\n');
+      const lines = involvedOrders.map(o => `- Order ${o.orderId} | ${o.shop} | ${o.currency} ${o.amount.toLocaleString()} | Buyer: ${o.buyer}`);
+      const content = header + '\n' + lines.join('\n');
+      const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${invoiceNo}.txt`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    }
+
+function setDefaultPendingFilters(){
+  const startEl = document.getElementById('pq-start');
+  const endEl = document.getElementById('pq-end');
+  const statusEl = document.getElementById('pq-status');
+  try{
+    const now = new Date();
+    const endStr = now.toISOString().substring(0,10);
+    const startDate = new Date(now.getTime() - 6*24*3600*1000); // 最近7天（含今天）
+    const startStr = startDate.toISOString().substring(0,10);
+    if(startEl) startEl.value = startStr;
+    if(endEl) endEl.value = endStr;
+    if(statusEl) statusEl.value = ''; // 不限定状态，只默认时间范围
+  }catch(e){ /* no-op */ }
+}
+
+function init(){ seedInitialInvoices(); randomizeOrderStatuses(); renderOrders(); renderInvoiceSummary(); bindEvents(); log('开票管理已加载'); }
+    document.addEventListener('DOMContentLoaded', init);
+  </script>
+</body>
+</html>
